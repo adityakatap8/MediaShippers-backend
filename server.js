@@ -4,6 +4,7 @@ import { authenticateToken } from './middlewares/authMiddleware.js';
 import { authRoutes } from './routes/authRoutes.js';
 import sourceTypeRouter from './routes/SourceRoutes.js';
 import servicesRoutes from './routes/servicesRoutes.js'
+import destinationRoutes from './routes/destinationRoutes.js'
 import formRoutes from './routes/formRoutes.js'
 import dotenv from 'dotenv';
 import mongoose from 'mongoose'; 
@@ -26,6 +27,7 @@ app.use('/api/ordertype', orderType);
 app.use('/api/sourcetype', sourceTypeRouter)
 app.use('/api/services', servicesRoutes);
 app.use('/api/submitform', formRoutes);
+app.use('/api/destinationtype', destinationRoutes);
 app.use(authenticateToken);
 
 // Add your routes here
