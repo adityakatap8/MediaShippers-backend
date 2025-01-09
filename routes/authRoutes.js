@@ -9,164 +9,6 @@ import mongoose from 'mongoose';
 const authRoutes = Router();
 
 
-
-// authRoutes.post('/store-order/:userId', async (req, res) => {
-//     const { userId } = req.params;
-//     const { orderId, orderDetails } = req.body;
-
-//     try {
-//       const newOrder = new Order({
-//         userId,
-//         orderId,
-//         orderDetails,
-//         createdAt: new Date()
-//       });
-
-//       await newOrder.save();
-//       res.status(201).json(newOrder);
-//     } catch (error) {
-//       res.status(400).json({ message: 'Failed to create order' });
-//     }
-// });
-
-// authRoutes.get('/user', authenticationToken, async (req, res) => {
-//     try {
-//       const userId = req.user.userId;
-      
-//       // Function to validate and convert userId
-//       const validateUserId = (value) => {
-//         if (typeof value !== 'string' && typeof value !== 'number') {
-//           throw new Error('Invalid userId format');
-//         }
-//         return value;
-//       };
-  
-//       let validatedUserId;
-//       try {
-//         validatedUserId = validateUserId(userId);
-//       } catch (error) {
-//         console.error('Error validating userId:', error);
-//         return res.status(400).json({
-//           success: false,
-//           errorMessage: 'Invalid userId format',
-//           errorDetails: 'UserId must be a valid string or number'
-//         });
-//       }
-  
-//       const user = await User.findById(validatedUserId);
-      
-//       if (!user) {
-//         return res.status(404).json({ 
-//           success: false,
-//           errorMessage: 'User not found',
-//           errorDetails: 'No user associated with this token'
-//         });
-//       }
-  
-//       const userDetails = {
-//         id: user.userId,
-//         name: user.name,
-//         email: user.email,
-//         avatar: user.avatar || null
-//       };
-  
-//       console.log('Sending user details:', JSON.stringify(userDetails));
-  
-//       res.json(userDetails);
-//     } catch (error) {
-//       console.error('Error fetching user details:', error);
-//       res.status(500).json({
-//         success: false,
-//         errorMessage: 'Failed to fetch user details',
-//         errorDetails: error.message
-//       });
-//     }
-//   });
-
-// authRoutes.get('/user', authenticationToken, async (req, res) => {
-//     try {
-//       console.log('Received request');
-//       const userId = req.user.userId;
-      
-//       // Function to validate and convert userId
-//       const validateUserId = (value) => {
-//         if (typeof value !== 'string' && typeof value !== 'number') {
-//           throw new Error('Invalid userId format');
-//         }
-//         return value;
-//       };
-  
-//       let validatedUserId;
-//       try {
-//         validatedUserId = validateUserId(userId);
-//         console.log('Validated User ID:', validatedUserId);
-//       } catch (error) {
-//         console.error('Error validating userId:', error.message);
-//         return res.status(400).json({
-//           success: false,
-//           errorMessage: 'Invalid userId format',
-//           errorDetails: 'UserId must be a valid string or number'
-//         });
-//       }
-  
-//       const user = await User.findById(validatedUserId);
-      
-//       if (!user) {
-//         console.error('User not found');
-//         return res.status(404).json({ 
-//           success: false,
-//           errorMessage: 'User not found',
-//           errorDetails: 'No user associated with this token'
-//         });
-//       }
-//       console.log('Found User:', JSON.stringify(user));
-
-//       const userDetails = {
-//         userId: user.userId,
-//         name: user.name,
-//         email: user.email,
-//         avatar: user.avatar || null
-//       };
-  
-//       console.log('Sending user details:', JSON.stringify(userDetails));
-    
-//       res.json(userDetails);
-  
-//     } catch (error) {
-//       console.error('Error fetching user details:', error.message);
-//       console.error('Error stack:', error.stack);
-//       res.status(500).json({
-//         success: false,
-//         errorMessage: 'Failed to fetch user details',
-//         errorDetails: error.message
-//       });
-//     }
-//   });
-
-// // Add a new route to store the token in localStorage
-// authRoutes.post('/store-token', authenticationToken, async (req, res) => {
-//   const { userId, name, email } = req.user;
-  
-//   try {
-//     // Store the token in localStorage
-//     sessionStorage.setItem('token', req.headers.authorization.split(' ')[1]);
-    
-//     // Store user data in sessionStorage
-//     sessionStorage.setItem('userData', JSON.stringify({ userId, name, email }));
-    
-//     res.json({ success: true, message: 'Token stored successfully' });
-//   } catch (error) {
-//     console.error('Error storing token:', error);
-//     res.status(500).json({ success: false, errorMessage: 'Failed to store token' });
-//   }
-// });
-
-// export { authRoutes };
-
-
-
-
-
 async function hashPassword(password) {
     const saltRounds = 10;
     try {
@@ -196,19 +38,37 @@ async function validatePassword(password, hashedPassword) {
 }
 
 async function authenticationToken(req, res, next) {
-    console.log('Authentication middleware called');
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
+  console.log('Authentication middleware called');
+  
+  // Get the Authorization header from the request
+  const authHeader = req.headers['authorization'];
 
-    if (token == null) return res.sendStatus(401);
+  // Check if Authorization header is present
+  if (!authHeader) {
+      console.error('Authorization header missing');
+      return res.status(401).json({ message: 'Authorization header missing' });
+  }
 
-    jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
-        if (err) return res.sendStatus(403);
-        req.user = user;
-        next();
-    });
+  // Extract the token from the header (Bearer <token>)
+  const token = authHeader.split(' ')[1];
+
+  if (!token) {
+      console.error('Token missing in Authorization header');
+      return res.status(401).json({ message: 'Token missing' });
+  }
+
+  // Verify the token
+  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+      if (err) {
+          console.error('Token verification failed:', err.message);
+          return res.status(403).json({ message: 'Invalid token' });
+      }
+
+      // Attach the user data to the request object
+      req.user = user;
+      next();  // Pass control to the next middleware or route handler
+  });
 }
-
 // Auth routes
 authRoutes.post('/register', async (req, res) => {
     console.log('Received register request:', req.body);
@@ -264,53 +124,50 @@ authRoutes.post('/register', async (req, res) => {
 });
 
 authRoutes.post('/login', async (req, res) => {
-    const { email, password } = req.body;
-    
-    try {
-      // Find the user
-      const user = await User.findOne({ email });
-      
-      console.log('User found:', user); // Log the user object
-      
-      if (!user) {
-        return res.status(404).json({ 
-          success: false,
-          errorMessage: 'User not found',
-          errorDetails: 'No account associated with this email'
-        });
-      }
+  const { email, password } = req.body;
   
-      // Validate password
-      const isValidPassword = await validatePassword(password, user.passwordHash);
-      if (!isValidPassword) {
-        return res.status(401).json({ 
-          success: false,
-          errorMessage: 'Invalid credentials',
-          errorDetails: 'Incorrect email or password'
-        });
-      }
-
-      // Generate JWT token
-      const token = generateJWT(user.userId);
-
-      // Store the token in localStorage
-      sessionStorage.setItem('token', token);
-
-      res.json({ 
-        success: true, 
-        message: 'Login successful',
-        userId: user.userId,
-        token: token
-      });
-    } catch (error) {
-      console.error('Error during login:', error);
-      res.status(500).json({
+  try {
+    // Find the user
+    const user = await User.findOne({ email });
+    
+    if (!user) {
+      return res.status(404).json({ 
         success: false,
-        errorMessage: 'Login failed',
-        errorDetails: error.message
+        errorMessage: 'User not found',
+        errorDetails: 'No account associated with this email'
       });
     }
+
+    // Validate password
+    const isValidPassword = await validatePassword(password, user.passwordHash);
+    if (!isValidPassword) {
+      return res.status(401).json({ 
+        success: false,
+        errorMessage: 'Invalid credentials',
+        errorDetails: 'Incorrect email or password'
+      });
+    }
+
+    // Generate JWT token
+    const token = generateJWT(user.userId);
+
+    // Return token and user details to frontend
+    res.json({ 
+      success: true, 
+      message: 'Login successful',
+      userId: user.userId,
+      token: token
+    });
+  } catch (error) {
+    console.error('Error during login:', error);
+    res.status(500).json({
+      success: false,
+      errorMessage: 'Login failed',
+      errorDetails: error.message
+    });
+  }
 });
+
 
 
 
@@ -386,20 +243,21 @@ authRoutes.get('/user', authenticationToken, async (req, res) => {
 });
 
 authRoutes.post('/store-token', authenticationToken, async (req, res) => {
-    const { userId, name, email } = req.user;
-    
-    try {
-      // Store the token in localStorage
-      sessionStorage.setItem('token', req.headers.authorization.split(' ')[1]);
-      
-      // Store user data in sessionStorage
-      sessionStorage.setItem('userData', JSON.stringify({ userId, name, email }));
-      
-      res.json({ success: true, message: 'Token stored successfully' });
-    } catch (error) {
+  const { userId, name, email } = req.user;
+
+  try {
+      // Return the token and user data to the frontend
+      res.json({
+          success: true,
+          message: 'Token and user data received successfully',
+          token: req.headers.authorization.split(' ')[1], // Include token in the response
+          userData: { userId, name, email } // Include user data in the response
+      });
+  } catch (error) {
       console.error('Error storing token:', error);
       res.status(500).json({ success: false, errorMessage: 'Failed to store token' });
-    }
-  });
+  }
+});
+
 
 export { authRoutes };

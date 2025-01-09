@@ -1,22 +1,30 @@
 import mongoose from 'mongoose';
 
-const screeningInfoSchema = new mongoose.Schema({
-  screeningDate: {
-    type: Date,
-  
-  },
-  screeningLocation: {
+// Schema for individual screenings
+const screeningSchema = new mongoose.Schema({
+  filmFestival: {
     type: String,
-   
   },
-  screeningTime: {
-    type: String,
-   
-  }
-}, {
-  timestamps: true
 });
 
-const ScreeningInfo = mongoose.model('ScreeningInfo', screeningInfoSchema);
+// Schema for individual distributors
+const distributorSchema = new mongoose.Schema({
+  distributor: {
+    type: String,
+  },
+});
 
-export default ScreeningInfo;
+// Main schema for ScreeningsInfo
+const screeningsInfoSchema = new mongoose.Schema(
+  {
+    screenings: [screeningSchema], // Array of screenings
+    distributors: [distributorSchema], // Array of distributors
+  },
+  {
+    timestamps: true, // Add createdAt and updatedAt timestamps
+  }
+);
+
+const ScreeningsInfo = mongoose.model('ScreeningsInfo', screeningsInfoSchema, 'screeninginfos');
+
+export default ScreeningsInfo;

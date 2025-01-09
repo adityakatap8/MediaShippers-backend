@@ -1,18 +1,16 @@
-// Import express
 import express from 'express';
-
-// Create a new router instance
 const projectFormRouter = express.Router();
 
-// Import ProjectFormController
-import projectFormController from '../controller/projectsFormController.js'; // Adjust the path as needed
+import projectFormController from '../controller/projectsFormController.js';
 
 // Define routes
-projectFormRouter.post('/', projectFormController.createProject);  // Create a new project
-projectFormRouter.get('/', projectFormController.getAllProjects);  // Get all projects
-projectFormRouter.get('/:id', projectFormController.getProjectById);  // Get a project by ID
-projectFormRouter.put('/:id', projectFormController.updateProject);  // Update a project
-projectFormRouter.delete('/:id', projectFormController.deleteProject);  // Delete a project
+projectFormRouter.post('/', projectFormController.createProject); // Create a new project
+projectFormRouter.get('/', projectFormController.getAllProjects); // Get all projects
+// projectFormRouter.get('/forms', projectFormController.getProjectForms); // New route: Get all project forms with their IDs
+projectFormRouter.get('/:id', projectFormController.getProjectById); // Get a project by ID
+projectFormRouter.put('/:id', projectFormController.updateProject); // Update a project
+projectFormRouter.delete('/:id', projectFormController.deleteProject); // Delete a project
 
-// Export the router
+// projectFormRouter.get('/form/:projectId', projectFormController.getProjectFormByProjectId);
+
 export default projectFormRouter;
