@@ -5,12 +5,14 @@ const projectInfoSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  projectName: { 
+    type: String,
+  },
   briefSynopsis: {
     type: String,
   },
   website: {
     type: String,
-    match: /^(https?:\/\/)?(www\.)[a-zA-Z0-9-]+\.[a-zA-Z]{2,6}(\.[a-zA-Z]{2,6})?$/  // URL validation
   },
   email: {
     type: String,
@@ -18,15 +20,57 @@ const projectInfoSchema = new mongoose.Schema({
   },
   twitter: {
     type: String,
-    
   },
   facebook: {
     type: String,
-    
   },
   instagram: {
     type: String,
-    
+  },
+  posterFileName: {
+    type: String, // Adjusted to match response field
+    required: false
+  },
+  bannerFileName: {
+    type: String, // Adjusted to match response field
+    required: false
+  },
+  trailerFileName: {
+    type: String, // Adjusted to match response field
+    required: false
+  },
+  movieFileName: {
+    type: String, // Adjusted to match response field
+    required: false
+  },
+  // s3SourceBannerUrl: {
+  //   type: String, // Adjusted to match response field
+  //   required: false
+  // },
+  // s3SourceMovieUrl: {
+  //   type: String, // Adjusted to match response field
+  //   required: false
+  // },
+  // s3SourcePosterUrl: {
+  //   type: String, // Adjusted to match response field
+  //   required: false
+  // },
+  s3SourceTrailerUrl: {
+    type: String, // Adjusted to match response field
+    required: false
+  },
+  srtFileName: { 
+    type: String, // Added field to store the SRT file name
+    required: false
+  },
+  infoDocFileName: { 
+    type: Array, // Added field to store the Info Document file name
+    required: false
+  },
+  userId: {
+    type: String, // This is the user reference
+    ref: 'UserId',
+    required: true
   }
 }, {
   timestamps: true // Automatically add createdAt and updatedAt fields

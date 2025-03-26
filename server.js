@@ -13,7 +13,10 @@ import cookieParser from 'cookie-parser';
 import projectFormRouter from './routes/projectFormRoutes.js';
 import folderRoutes from './routes/folderRoutes.js';
 import fileRoutes from './routes/fileRoutes.js';
+import projectInfoRoutes from './routes/projectInfoRoutes.js'
+import rightsInfoRoutes from './routes/rightsInfoRoutes.js'
 import { deleteItemHandler } from './controller/folderController.js'; // Import the delete handler
+import srtFileRouter from './routes/srtFileRoutes.js';
 
 dotenv.config();
 
@@ -46,6 +49,16 @@ app.use('/api/folders', folderRoutes);
 app.use('/api/files', fileRoutes);
 
 app.use('/api/projects', projectFormRouter);
+app.use('/api/project-form', projectFormRouter);
+
+// Use project routes
+app.use('/api/projectsInfo', projectInfoRoutes);
+
+// Use the rightsInfoRoutes
+app.use('/api/rightsinfo', rightsInfoRoutes);
+
+// srt file routes
+app.use('/api/srtFile', srtFileRouter)
 
 // Ensure authentication middleware is used for routes that need token validation
 app.use(authenticateToken);

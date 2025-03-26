@@ -4,6 +4,7 @@ import SubmitterInfo from './FormModels/SubmitterInfoSchema.js';
 import CreditsInfo from './FormModels/CreditsInfoSchema.js';
 import SpecificationsInfo from './FormModels/SpecificationsInfo.js';
 import ScreeningInfo from './FormModels/ScreeningInfoSchema.js';
+import RightsInfo from './FormModels/RightsInfoSchema.js'; // Import the RightsInfo model
 
 const projectFormSchema = new mongoose.Schema({
     projectInfo: {
@@ -30,7 +31,12 @@ const projectFormSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'ScreeningInfo', // Reference to ScreeningInfo model
         required: true
-    }]
+    }],
+    rightsInfo: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'RightsInfo', // Reference to RightsInfo model
+        required: true
+    }]  // Add rightsInfo as an array of ObjectIds referencing RightsInfo model
 }, { timestamps: true });
 
 const ProjectForm = mongoose.model('ProjectForm', projectFormSchema);
