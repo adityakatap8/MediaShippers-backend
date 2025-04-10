@@ -1,10 +1,18 @@
-import express from 'express';
-import multer from 'multer';
-import { uploadFileHandler } from '../controller/fileController.js';
+// routes/uploadRoutes.js
 
-const upload = multer({ storage: multer.memoryStorage() });
+import express from 'express';
+import { uploadFileHandler } from '../controller/fileController.js';
+import multer from 'multer';
+
+const upload = multer();  // Using multer to handle the files
+
 const router = express.Router();
 
-router.post('/upload-file', upload.single('file'), uploadFileHandler);
+// POST endpoint to handle file upload
+router.post('/upload-file', upload.fields([
+  { name: 'projectPoster', maxCount: 1 },
+  { name: 'projectBanner', maxCount: 1 },
+  { name: 'projectTrailer', maxCount: 1 }
+]), uploadFileHandler);
 
 export default router;

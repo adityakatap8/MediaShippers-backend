@@ -24,6 +24,14 @@ const creditsInfoSchema = new mongoose.Schema({
     lastName: {
       type: String
     }
+  }],
+  actors: [{
+    firstName: {
+      type: String
+    },
+    lastName: {
+      type: String
+    }
   }]
 }, {
   timestamps: true
