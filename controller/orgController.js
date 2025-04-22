@@ -28,10 +28,10 @@ export const registerOrganizationWithUser = async (req, res) => {
     }
 
     // Check if organization already exists
-    const existingOrg = await Organization.findOne({ orgName });
-    if (existingOrg) {
-      return res.status(400).json({ message: 'Organization already exists' });
-    }
+    // const existingOrg = await Organization.findOne({ orgName });
+    // if (existingOrg) {
+    //   return res.status(400).json({ message: 'Organization already exists' });
+    // }
 
     // Check if user already exists
     const existingUser = await User.findOne({ email: userEmail });
