@@ -459,10 +459,10 @@ async function authenticationToken(req, res, next) {
 authRoutes.post('/register', async (req, res) => {
   console.log('Received register request:', req.body);
   try {
-    const { name, orgName, email, password } = req.body;
+    const { name, orgName, email, password, role } = req.body;
 
     // Validate input
-    if (!name || !orgName || !email || !password) {
+    if (!name || !orgName || !email || !password || !role) {
       return res.status(400).json({
         success: false,
         errorMessage: 'Missing required fields'
@@ -492,7 +492,8 @@ authRoutes.post('/register', async (req, res) => {
       name,
       orgName,
       email,
-      passwordHash: hashedPassword
+      passwordHash: hashedPassword,
+      role
     });
 
     // Save the user

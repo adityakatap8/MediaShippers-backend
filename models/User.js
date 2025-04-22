@@ -9,26 +9,31 @@ const UserSchema = new mongoose.Schema({
   orgName: String,
   email: {
     type: String,
-    unique: true
+    unique: true,
+    required: true
+  },
+  role: {
+    type: String,
+    enum: ['Admin', 'Seller', 'Buyer'],
+    default: 'Buyer',
+    required: true
   },
   passwordHash: String,
-  createdAt: String,
-  updatedAt: Date,
+  isVerified: {
+    type: Boolean,
+    default: false,
+  },
+  verificationToken: String,
+  tokenExpiresAt: Date,
+  createdAt: {
+    type: Date,
+    default: Date.now
+  },
+  updatedAt: {
+    type: Date,
+    default: Date.now
+  },
 });
 
-// Add virtual userId field that references _id
-UserSchema.virtual('userId').get(function() {
-  return this._id;
-});
-
-// Configure schema options
-UserSchema.set('toJSON', {
-  virtuals: true,
-  transform: function(doc, ret) {
-    // Make _id available as id in output
-    ret.id = ret._id;
-    return ret;
-  }
-});
 
 export const User = mongoose.model('User', UserSchema);
