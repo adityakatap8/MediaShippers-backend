@@ -91,8 +91,8 @@ if (process.env.NODE_ENV === 'development') {
 }
 
 // Static files
-app.use(express.static(path.join('C:/mediashipper client 26-03-2025/dist')));
-
+app.use(express.static(path.join('C:/client 22-04-2025/dist')));
+// C:\client 22-04-2025\dist
 // ---------------- Public Routes ----------------
 app.use('/api/auth', authRoutes);
 app.use('/api/user', userInfoRouter);
@@ -115,7 +115,7 @@ app.post('/api/delete-item', authenticateToken, deleteItemHandler);
 
 // React app fallback
 app.get(/^\/(?!api).*/, (req, res) => {
-  res.sendFile(path.join('C:/mediashipper client 26-03-2025/dist', 'index.html'));
+  res.sendFile(path.join('C:/client 22-04-2025/dist', 'index.html'));
 });
 
 // MongoDB connection
