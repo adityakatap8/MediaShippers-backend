@@ -9,30 +9,66 @@ const projectFormController = {
 
   // Create a new project form combined components info is shared using this code
   createProject: async (req, res) => {
-    console.log("inside createProject ====>");
+    console.log("🟢 Inside createProject controller ====>");
+  
     try {
-      const { projectInfo, submitterInfo, creditsInfo, specificationsInfo, screeningsInfo, rightsInfo, userId } = req.body; // Added rightsInfo
-
-      if (!projectInfo || !projectInfo.projectTitle) {
-        return res.status(400).json({ error: "Project Title is required" });
-      }
-
-      const newProjectForm = await ProjectFormService.createProjectForm(
+      const {
         projectInfo,
-        submitterInfo,
         creditsInfo,
         specificationsInfo,
         screeningsInfo,
-        rightsInfo,  // Passed rightsInfo here
+        rightsInfo,
+        srtInfo,  // Get srtInfo from request body
+        userId,
+      } = req.body;
+  
+      // 🔍 Debug logs
+      console.log("📜 Received projectInfo:", JSON.stringify(projectInfo, null, 2));
+      console.log("📜 Received srtInfo:", JSON.stringify(srtInfo, null, 2)); // Log srtInfo
+      console.log("📜 Received creditsInfo:", JSON.stringify(creditsInfo, null, 2));
+      console.log("📜 Received specificationsInfo:", JSON.stringify(specificationsInfo, null, 2));
+      console.log("📜 Received screeningsInfo:", JSON.stringify(screeningsInfo, null, 2));
+      console.log("📜 Received rightsInfo:", JSON.stringify(rightsInfo, null, 2));
+  
+      // Combine srtFiles and infoDocs into one single object (srtInfo)
+      const combinedSrtInfo = {
+        srtFiles: srtInfo ? srtInfo.srtFiles : [],
+        infoDocuments: srtInfo ? srtInfo.infoDocuments : [],
+      };
+  
+      // Handle missing required fields
+      if (!projectInfo || !projectInfo.projectTitle) {
+        return res.status(400).json({ error: "Project Title is required" });
+      }
+  
+      // Pass the combined srtInfo (including both srtFiles and infoDocuments) to the service
+      const newProjectForm = await ProjectFormService.createProjectForm(
+        projectInfo,
+        creditsInfo,
+        specificationsInfo,
+        screeningsInfo,
+        rightsInfo,
+        combinedSrtInfo,  // Pass the combined srtInfo to the service
         userId
       );
-
-      res.status(201).json(newProjectForm);
+  
+      // Respond with success message
+      res.status(201).json({
+        message: "Project form created successfully",
+        project: newProjectForm,
+      });
     } catch (error) {
-      console.error("Error creating project:", error.message);
+      console.error("❌ Error creating project:", error.message);
       res.status(500).json({ error: "Internal server error" });
     }
   },
+  
+  
+  
+  
+  
+  
+  
 
   // Get all project forms
   getAllProjects: async (req, res) => {
