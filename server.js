@@ -24,6 +24,7 @@ import srtFileRouter from './routes/srtFileRoutes.js';
 import { deleteItemHandler } from './controller/folderController.js';
 
 import { authenticateToken } from './middlewares/authMiddleware.js';
+import orgRoutes from './routes/orgRoutes.js';
 
 dotenv.config();
 
@@ -39,6 +40,8 @@ const corsOptions = {
       'https://172.31.27.22:3000',
       'https://www.mediashippers.com',
       'http://localhost:5173',
+      'http://localhost:3000',
+      '*'
     ];
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
@@ -51,9 +54,13 @@ const corsOptions = {
   credentials: true,
 };
 
+app.options('*', cors(corsOptions));
+
 // Force HTTPS (if behind a proxy/load balancer)
 app.use((req, res, next) => {
-  if (req.headers['x-forwarded-proto'] !== 'https') {
+  const isProduction = process.env.NODE_ENV === 'production';
+
+  if (isProduction && req.headers['x-forwarded-proto'] !== 'https') {
     return res.redirect(301, `https://${req.headers.host}${req.url}`);
   }
   next();
@@ -87,6 +94,11 @@ app.use('/api/rightsinfo', authenticateToken, rightsInfoRoutes);
 app.use('/api/srtFile', authenticateToken, srtFileRouter);
 app.post('/api/delete-item', authenticateToken, deleteItemHandler);
 
+// ---------------Cart API's----------------
+
+// Add organization routes
+app.use('/api/organization', orgRoutes);
+
 // React app fallback
 app.get(/^\/(?!api).*/, (req, res) => {
   res.sendFile(path.join('C:/mediashipper client 26-03-2025/dist', 'index.html'));
@@ -105,7 +117,7 @@ async function connect() {
 
 // Start server
 connect().then(() => {
-  app.listen(port, '0.0.0.0', () => {
+  app.listen(port, 'localhost', () => {
     console.log(`Server running at http://0.0.0.0:${port}`);
   });
 });  
