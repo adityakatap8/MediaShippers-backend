@@ -8,6 +8,11 @@ const UserSchema = new mongoose.Schema({
     unique: true,
     required: true
   },
+  organizationId: {
+    type: String,
+    ref: 'Organization',
+    required: true,
+  },
   role: {
     type: String,
     enum: ['Admin', 'Seller', 'Buyer'],
