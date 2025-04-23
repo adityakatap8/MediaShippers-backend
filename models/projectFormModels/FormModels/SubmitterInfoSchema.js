@@ -8,7 +8,7 @@ const submitterInfoSchema = new mongoose.Schema({
     trim: true
   },
   contactNumber: {
-    type: String,
+    type: String, 
     
     trim: true
   },

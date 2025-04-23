@@ -456,6 +456,69 @@ export const getSubfoldersForProject = async (orgName, projectName) => {
 
 
 
+//old code 22-4-25
+// export const transferFilesBetweenBuckets = async (
+//     sourceUrl,
+//     orgName,
+//     projectFolder,
+//     fileName,
+//     accessKeyId,
+//     secretAccessKey,
+//     fileType
+//   ) => {
+//     return new Promise((resolve, reject) => {
+//       // Debugging log to see what fileType is being passed
+//       console.log("File type received:", fileType);
+  
+//       let destinationUrl = "";
+  
+//       // Determine destination folder based on file type
+//       if (fileType === "poster" || fileType === "banner") {
+//         destinationUrl = `s3://mediashippers-filestash/${orgName}/${projectFolder}/film stills/${fileName}`;
+//       } else if (fileType === "trailer") {
+//         destinationUrl = `s3://mediashippers-filestash/${orgName}/${projectFolder}/trailer/${fileName}`;
+//       } else if (fileType === "movie") {
+//         destinationUrl = `s3://mediashippers-filestash/${orgName}/${projectFolder}/master/${fileName}`;
+//       } else {
+//         // Reject if fileType is invalid
+//         return reject({ error: "Invalid file type" });
+//       }
+  
+//       // Set up the environment variables to include AWS credentials
+//       const envVars = {
+//         ...process.env,
+//         AWS_ACCESS_KEY_ID: accessKeyId,
+//         AWS_SECRET_ACCESS_KEY: secretAccessKey,
+//       };
+  
+//       // Define the AWS CLI command to transfer the file
+//       const s3Command = spawn("aws", ["s3", "cp", sourceUrl, destinationUrl], { env: envVars });
+  
+//       let output = "";
+//       let errorOutput = "";
+  
+//       // Collect the command's output
+//       s3Command.stdout.on("data", (data) => {
+//         output += data.toString();
+//       });
+  
+//       // Collect the command's error output
+//       s3Command.stderr.on("data", (data) => {
+//         errorOutput += data.toString();
+//       });
+  
+//       // Handle process close event
+//       s3Command.on("close", (code) => {
+//         if (code === 0) {
+//           resolve({ message: "File transferred successfully", output });
+//         } else {
+//           reject({ error: `AWS CLI process exited with code ${code}`, errorOutput });
+//         }
+//       });
+//     });
+//   };
+  
+
 
 export const transferFilesBetweenBuckets = async (
     sourceUrl,
@@ -467,55 +530,67 @@ export const transferFilesBetweenBuckets = async (
     fileType
   ) => {
     return new Promise((resolve, reject) => {
-      // Debugging log to see what fileType is being passed
-      console.log("File type received:", fileType);
+      console.log("🔄 Starting file transfer...");
+      console.log("📄 File type:", fileType);
+      console.log("📦 Source URL:", sourceUrl);
+      console.log("📁 Destination folder:", `${orgName}/${projectFolder}`);
   
-      let destinationUrl = "";
+      // Map file types to folder names
+      const folderMap = {
+        poster: "film stills",
+        banner: "film stills",
+        trailer: "trailer",
+        movie: "master",
+      };
   
-      // Determine destination folder based on file type
-      if (fileType === "poster" || fileType === "banner") {
-        destinationUrl = `s3://mediashippers-filestash/${orgName}/${projectFolder}/film stills/${fileName}`;
-      } else if (fileType === "trailer") {
-        destinationUrl = `s3://mediashippers-filestash/${orgName}/${projectFolder}/trailer/${fileName}`;
-      } else if (fileType === "movie") {
-        destinationUrl = `s3://mediashippers-filestash/${orgName}/${projectFolder}/master/${fileName}`;
-      } else {
-        // Reject if fileType is invalid
-        return reject({ error: "Invalid file type" });
+      const folder = folderMap[fileType];
+      if (!folder) {
+        return reject({ error: `❌ Invalid file type provided: ${fileType}` });
       }
   
-      // Set up the environment variables to include AWS credentials
+      // Construct destination URL
+      const destinationUrl = `s3://mediashippers-filestash/${orgName}/${projectFolder}/${folder}/${fileName}`;
+  
+      // Use the full path to aws.exe on Windows
+      const awsPath = "C:/Program Files/Amazon/AWSCLIV2/aws.exe";
+  
+      // Pass AWS credentials through environment variables
       const envVars = {
         ...process.env,
         AWS_ACCESS_KEY_ID: accessKeyId,
         AWS_SECRET_ACCESS_KEY: secretAccessKey,
       };
   
-      // Define the AWS CLI command to transfer the file
-      const s3Command = spawn("aws", ["s3", "cp", sourceUrl, destinationUrl], { env: envVars });
+      console.log(`🚀 Running AWS CLI command: aws s3 cp "${sourceUrl}" "${destinationUrl}"`);
+  
+      // Spawn AWS CLI process
+    //   const s3Command = spawn('aws', ["s3", "cp", sourceUrl, destinationUrl], { env: envVars });
+      const s3Command = spawn(awsPath, ['s3', 'cp', sourceUrl, destinationUrl]);
   
       let output = "";
       let errorOutput = "";
   
-      // Collect the command's output
       s3Command.stdout.on("data", (data) => {
         output += data.toString();
       });
   
-      // Collect the command's error output
       s3Command.stderr.on("data", (data) => {
         errorOutput += data.toString();
       });
   
-      // Handle process close event
       s3Command.on("close", (code) => {
         if (code === 0) {
+          console.log("✅ File transferred successfully!");
           resolve({ message: "File transferred successfully", output });
         } else {
+          console.error(`❌ AWS CLI exited with code ${code}`);
           reject({ error: `AWS CLI process exited with code ${code}`, errorOutput });
         }
       });
+  
+      s3Command.on("error", (err) => {
+        console.error("❌ Failed to spawn AWS CLI:", err.message);
+        reject({ error: `Failed to spawn AWS CLI: ${err.message}` });
+      });
     });
   };
-  
-

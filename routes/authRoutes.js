@@ -575,7 +575,7 @@ authRoutes.post('/login', async (req, res) => {
 // Logout route
 authRoutes.post('/logout', (req, res) => {
   res.clearCookie('token', {
-    httpOnly: true,
+    httpOnly: false,
     sameSite: "Lax",
     secure: req.app.get("env") === "production",
   });
@@ -775,5 +775,28 @@ authRoutes.get('/user/org/:userId', async (req, res) => {
     });
   }
 });
+
+
+// Route to fetch all users from the database
+authRoutes.get('/all-users', async (req, res) => {
+  try {
+    const users = await User.find({}, '-passwordHash'); // exclude passwordHash field
+
+    console.log('All users from DB:', users); // ✅ Log to console
+
+    res.json({
+      success: true,
+      users
+    });
+  } catch (error) {
+    console.error('Error fetching users:', error.message);
+    res.status(500).json({
+      success: false,
+      errorMessage: 'Failed to fetch users',
+      errorDetails: error.message
+    });
+  }
+});
+
 
 export { authRoutes };

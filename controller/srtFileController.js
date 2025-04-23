@@ -1,86 +1,154 @@
-import AWS from 'aws-sdk';
+// srtFileController.js
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
-import SrtFile from '../models/projectFormModels/FormModels/SrtFileUpload.js'; // Adjust the path to your model
+import SrtInfoFileSchema from "../models/projectFormModels/FormModels/SrtInfoFileSchema.js";
 
-// Initialize the AWS S3 instance
-const s3 = new AWS.S3();
-
-// Set up multer for file storage (temporary storage, will be used to read file before uploading to S3)
+// Set up multer for file storage (temporary storage, will be used to read files before saving locally)
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, 'uploads/srtFiles/'); // Temporary storage for the uploaded file
+    cb(null, 'uploads/srtInfoFiles/'); // Temporary storage for the uploaded files
   },
   filename: (req, file, cb) => {
-    cb(null, Date.now() + path.extname(file.originalname)); // File will be saved with a timestamp
+    cb(null, Date.now() + path.extname(file.originalname)); // Files will be saved with a timestamp
   }
 });
 
-const upload = multer({ storage }).single('srtFile');  // 'srtFile' is the field name in the form
+// Multer setup for handling multiple files (srtFile and infoDocFile)
+const upload = multer({ storage }).fields([
+  { name: 'srtFile', maxCount: 1 },
+  { name: 'infoDocFile', maxCount: 1 },
+]);
 
-// Controller for uploading file to S3
-export const uploadFile = (req, res) => {
+// Controller for uploading both SRT and Info Doc files
+export const uploadFiles = (req, res) => {
   upload(req, res, async (err) => {
+    if (err) {
+      return res.status(500).json({ message: 'Error uploading files', error: err });
+    }
+
+    try {
+      const { srtFile, infoDocFile } = req.files;
+
+      if (!srtFile || !infoDocFile) {
+        return res.status(400).json({ message: 'Both SRT file and Info Doc file are required' });
+      }
+
+      // Prepare file details for SRT file
+      const srtFileName = srtFile[0].filename;
+      const srtFilePath = srtFile[0].path;  // Local path to the SRT file
+      const srtFileType = srtFile[0].mimetype;
+      const srtFileSize = srtFile[0].size;
+
+      // Prepare file details for Info Doc file
+      const infoDocFileName = infoDocFile[0].filename;
+      const infoDocFilePath = infoDocFile[0].path;  // Local path to the Info Doc file
+      const infoDocFileType = infoDocFile[0].mimetype;
+      const infoDocFileSize = infoDocFile[0].size;
+
+      // Save file details in the database using the updated schema name (SrtInfoFileSchema)
+      const newFileSet = new SrtInfoFileSchema({
+        srtFileName,
+        srtFilePath,  // Save the local file path for the SRT file
+        srtFileType,
+        srtFileSize,
+        infoDocFileName,
+        infoDocFilePath,  // Save the local file path for the Info Doc file
+        infoDocFileType,
+        infoDocFileSize,
+        category: 'srt',  // You can customize the category based on the type (e.g., 'srt' or 'infoDoc')
+        userId: req.body.userId,  // Assuming userId is passed in the body
+        projectName: req.body.projectName,  // Assuming projectName is passed in the body
+        orgName: req.body.orgName || '',  // Optional: Assuming orgName is passed in the body
+      });
+
+      // Save to the database
+      await newFileSet.save();
+
+      // Return the fileId and file details in the response
+      res.status(201).json({
+        message: 'Files uploaded and saved successfully',
+        fileSet: {
+          id: newFileSet._id,   // File ID
+          srtFile: {
+            name: newFileSet.srtFileName,
+            path: newFileSet.srtFilePath,
+            type: newFileSet.srtFileType,
+          },
+          infoDocFile: {
+            name: newFileSet.infoDocFileName,
+            path: newFileSet.infoDocFilePath,
+            type: newFileSet.infoDocFileType,
+          }
+        },
+      });
+
+    } catch (error) {
+      console.error('Error uploading files:', error);
+      res.status(500).json({ message: 'Error uploading files', error: error.message });
+    }
+  });
+};
+
+
+// 📤 Upload a single SRT or Info Doc file individually
+export const uploadSingleFile = (req, res) => {
+  const singleUpload = multer({ storage }).single('file');
+
+  singleUpload(req, res, async (err) => {
     if (err) {
       return res.status(500).json({ message: 'Error uploading file', error: err });
     }
 
     try {
-      const { originalname, mimetype, size, path: filePath } = req.file;
-      const { orgName, projectFolder, srtFileName } = req.body; // Extract orgName, projectFolder, and srtFileName from the request body
+      const file = req.file;
+      const { userId, projectName, orgName, category } = req.body;
 
-      // Construct the S3 path dynamically
-      const s3Key = `${orgName}/${projectFolder}/srtFiles/${srtFileName}`;
+      if (!file) {
+        return res.status(400).json({ message: 'No file uploaded' });
+      }
 
-      // Read the file content from the temporary storage
-      const fileContent = fs.readFileSync(filePath);
-
-      // Define the S3 upload parameters
-      const params = {
-        Bucket: 'mediashippers-filestash',  // Your S3 bucket name
-        Key: s3Key,  // The dynamic path in S3
-        Body: fileContent,  // The content of the file
-        ContentType: mimetype,  // The MIME type of the file
-        ACL: 'public-read',  // Set the file's ACL to public-read so that it can be accessed
-      };
-
-      // Upload the file to S3
-      const s3Response = await s3.upload(params).promise();
-
-      // Get the file URL from the S3 response
-      const fileUrl = s3Response.Location;
-
-      // Save file details in the database
-      const newFile = new SrtFile({
-        fileName: srtFileName,  // File name as received in the request body
-        filePath: fileUrl,  // Save the S3 URL in the database
-        fileType: mimetype,
-        size: size,
+      const newFile = new SrtInfoFileSchema({
+        category: category || 'srt', // 'srt' or 'infoDoc'
+        userId: userId || '',
+        projectName: projectName || '',
+        orgName: orgName || '',
       });
 
-      // Save to the database
-      await newFile.save();
+      // Assign file metadata based on category
+      if (category === 'infoDoc') {
+        newFile.infoDocFileName = file.filename;
+        newFile.infoDocFilePath = file.path;
+        newFile.infoDocFileType = file.mimetype;
+        newFile.infoDocFileSize = file.size;
+      } else {
+        newFile.srtFileName = file.filename;
+        newFile.srtFilePath = file.path;
+        newFile.srtFileType = file.mimetype;
+        newFile.srtFileSize = file.size;
+      }
 
-      // Optionally, delete the temporary file after upload
-      fs.unlinkSync(filePath);
+      await newFile.save();
 
       res.status(201).json({
         message: 'File uploaded successfully',
-        file: newFile,
+        fileId: newFile._id, // ✅ return this to frontend
+        category,
+        filePath: file.path,
       });
 
     } catch (error) {
-      console.error('Error uploading file to S3:', error);
-      res.status(500).json({ message: 'Error uploading file to S3', error: error.message });
+      console.error('Upload error:', error);
+      res.status(500).json({ message: 'Server error', error: error.message });
     }
   });
 };
 
+
 // Controller for getting all files
 export const getFiles = async (req, res) => {
   try {
-    const files = await SrtFile.find();
+    const files = await SrtInfoFileSchema.find();  // Use the updated schema to fetch file details
     res.status(200).json({ message: 'Files retrieved successfully', files });
   } catch (error) {
     res.status(500).json({ message: 'Error retrieving files', error: error.message });
@@ -92,25 +160,19 @@ export const deleteFile = async (req, res) => {
   const { fileId } = req.params;
 
   try {
-    const file = await SrtFile.findById(fileId);
+    const file = await SrtInfoFileSchema.findById(fileId);  // Use the updated schema
     if (!file) {
       return res.status(404).json({ message: 'File not found' });
     }
 
-    // Optionally, remove the file from the S3 bucket if needed
-    const params = {
-      Bucket: 'mediashippers-filestash', // Your S3 bucket name
-      Key: file.filePath.split('mediashippers-filestash/')[1], // Extract the S3 path from the URL
-    };
-
-    await s3.deleteObject(params).promise();
+    // Remove the file from the local file system if needed
+    fs.unlinkSync(file.srtFilePath);
+    fs.unlinkSync(file.infoDocFilePath);
 
     // Remove the file entry from the database
-    await SrtFile.findByIdAndDelete(fileId);
-    res.status(200).json({ message: 'File deleted successfully' });
+    await SrtInfoFileSchema.findByIdAndDelete(fileId);  // Use the updated schema to delete the record
+    res.status(200).json({ message: 'Files deleted successfully' });
   } catch (error) {
-    res.status(500).json({ message: 'Error deleting file', error: error.message });
+    res.status(500).json({ message: 'Error deleting files', error: error.message });
   }
 };
-
-

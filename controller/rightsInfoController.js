@@ -15,13 +15,15 @@ export const getAllRightsInfo = async (req, res) => {
 // Controller to create a new RightsInfo entry
 export const createRightsInfo = async (req, res) => {
   try {
-    const { title } = req.body;
-    const newRightsInfo = await RightsInfoService.createRightsInfo(title);
+    const rightsInfoData = req.body;
+
+    const newRightsInfo = await RightsInfoService.createRightsInfo(rightsInfoData);
     res.status(201).json({ success: true, data: newRightsInfo });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
 
 // Controller to delete a RightsInfo entry by ID
 export const deleteRightsInfo = async (req, res) => {
