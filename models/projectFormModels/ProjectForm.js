@@ -12,11 +12,11 @@ const projectFormSchema = new mongoose.Schema({
         ref: 'ProjectInfo', // Reference to ProjectInfo model
         required: true
     },
-    submitterInfo: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'SubmitterInfo', // Reference to SubmitterInfo model
-        required: true
-    },
+    // submitterInfo: {
+    //     type: mongoose.Schema.Types.ObjectId,
+    //     ref: 'SubmitterInfo', // Reference to SubmitterInfo model
+    //     required: true
+    // },
     creditsInfo: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'CreditsInfo', // Reference to CreditsInfo model

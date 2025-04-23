@@ -85,7 +85,10 @@ const getPresignedUrl = async (s3Url) => {
     Key: key,
     Expires: 3600, // Link expires in 1 hour
   };
+  const presignedUrl = s3.getSignedUrlPromise("getObject", params)
+  console.log("presigned url",presignedUrl )
   return await s3.getSignedUrlPromise("getObject", params);
+  
 };
 
 router.post('/download-files', async (req, res) => {
