@@ -524,7 +524,7 @@ authRoutes.post('/login', async (req, res) => {
 
   try {
     const user = await User.findOne({ email });
-
+    console.log("user====", user)
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -543,22 +543,21 @@ authRoutes.post('/login', async (req, res) => {
     }
 
     // Generate JWT token
-    const token = generateJWT(user.userId); // Add more claims if needed
-
-    // Set HTTP-only cookie
+    const token = generateJWT(user._id); // Add more claims if needed
     res.cookie('token', token, {
-      httpOnly: true,
+      httpOnly: false,
       secure: true,
       sameSite: 'None',
       maxAge: 1000 * 60 * 60 * 24, // 1 day
-    });
+    });    console.log("token", token)
 
     // ✅ Send token in response body so frontend can store it in sessionStorage
     res.status(200).json({
       success: true,
       message: 'Login successful',
       token,              // 👈 Include token in response body
-      userId: user.userId // 👈 Still send user ID
+      userId: user._id, // 👈 Still send user ID
+      user
     });
 
   } catch (error) {
@@ -648,7 +647,6 @@ authRoutes.get('/user', authenticationToken, async (req, res) => {
   try {
     console.log('Received request');
     const userId = req.user.userId;
-
     const validateUserId = (value) => {
       if (typeof value !== 'string' && typeof value !== 'number') {
         throw new Error('Invalid userId format');
@@ -669,7 +667,7 @@ authRoutes.get('/user', authenticationToken, async (req, res) => {
       });
     }
 
-    const user = await User.findOne({ $or: [{ _id: validatedUserId }, { userId: validatedUserId }] });
+    const user = await User.findById(userId);
 
     if (!user) {
       console.error('User not found');
@@ -682,7 +680,8 @@ authRoutes.get('/user', authenticationToken, async (req, res) => {
     console.log('Found User:', JSON.stringify(user));
 
     const userDetails = {
-      userId: user.userId,
+      user,
+      userId: user._id,
       name: user.name,
       email: user.email,
       avatar: user.avatar || null,

@@ -39,6 +39,8 @@ const corsOptions = {
       'https://172.31.27.22:3000',
       'https://www.mediashippers.com',
       'http://localhost:5173',
+      'http://localhost:3000',
+      '*'
     ];
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
@@ -51,9 +53,13 @@ const corsOptions = {
   credentials: true,
 };
 
+app.options('*', cors(corsOptions));
+
 // Force HTTPS (if behind a proxy/load balancer)
 app.use((req, res, next) => {
-  if (req.headers['x-forwarded-proto'] !== 'https') {
+  const isProduction = process.env.NODE_ENV === 'developement';
+
+  if (isProduction && req.headers['x-forwarded-proto'] !== 'https') {
     return res.redirect(301, `https://${req.headers.host}${req.url}`);
   }
   next();

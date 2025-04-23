@@ -1,15 +1,14 @@
 import jwt from "jsonwebtoken";
 
 async function authenticateToken(req, res, next) {
-  console.log("=== AUTH MIDDLEWARE STARTED ===");
+  const authHeader = req.headers['authorization'];
+  console.log("Authorization Header:", authHeader);
 
-  // Get the token from cookies
-  const token = req.cookies.token;
-  console.log("Received Token from Cookie:", token);
+  const token = authHeader && authHeader.split(' ')[1];
+  console.log("Extracted token:", token);
 
   if (!token) {
-    console.error("🚨 No token provided in cookies!");
-    return res.status(401).json({ error: "No token provided" });
+    return res.status(401).json({ error: 'Token missing' });
   }
 
   jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
