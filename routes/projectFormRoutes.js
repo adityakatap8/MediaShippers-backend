@@ -14,7 +14,7 @@ import projectFormDataController from '../controller/projectFormDataController.j
 
 // Define routes
 projectFormRouter.post('/', projectFormController.createProject);
-// projectFormRouter.get('/', projectFormController.getAllProjects);
+projectFormRouter.get('/', projectFormController.getAllProjects);
 projectFormRouter.get('/:id', projectFormController.getUserProjects);
 
 projectFormRouter.get('/:id', projectFormController.getProjectById);
