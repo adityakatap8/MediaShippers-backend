@@ -188,7 +188,7 @@ authRoutes.post('/login', async (req, res) => {
 
   try {
     const user = await User.findOne({ email });
-
+    console.log("user====", user)
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -206,23 +206,22 @@ authRoutes.post('/login', async (req, res) => {
       });
     }
 
-    // ✅ Generate token with _id
-    const token = generateJWT(user); // now passing full user
-
-    // ✅ Set token as HTTP-only cookie
+    // Generate JWT token
+    const token = generateJWT(user._id); // Add more claims if needed
     res.cookie('token', token, {
       httpOnly: false, // use true in production
       secure: true,
       sameSite: 'None',
       maxAge: 1000 * 60 * 60 * 24, // 1 day
-    });
+    });    console.log("token", token)
 
     // ✅ Send token and userId (_id) in response
     res.status(200).json({
       success: true,
       message: 'Login successful',
-      token,
-      userId: user._id // now sending correct _id
+      token,              // 👈 Include token in response body
+      userId: user._id, // 👈 Still send user ID
+      user
     });
 
   } catch (error) {
@@ -412,8 +411,7 @@ authRoutes.get('/user', authenticationToken, async (req, res) => {
       });
     }
 
-    // Find user using _id (UUID string)
-    const user = await User.findOne({ _id: validatedUserId });
+    const user = await User.findById(userId);
 
     if (!user) {
       console.error('❌ User not found');
@@ -426,6 +424,7 @@ authRoutes.get('/user', authenticationToken, async (req, res) => {
 
     // Prepare user info
     const userDetails = {
+      user,
       userId: user._id,
       name: user.name,
       email: user.email,

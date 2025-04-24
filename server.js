@@ -56,19 +56,43 @@ const port = process.env.PORT || 3000;
 // };
 
 const corsOptions = {
-  origin: [
-    'http://localhost:5173',
-    'http://127.0.0.1:5173',
-    'http://localhost:5175', // <-- include this
-    'http://127.0.0.1:5175',
-    'http://localhost:3000',
-    'http://127.0.0.1:3000',
-  ],
+  origin: (origin, callback) => {
+    const allowedOrigins = [
+      'https://www.mediashippers.com:3000',
+      'https://13.61.14.53:3000',
+      'https://172.31.27.22:3000',
+      'https://www.mediashippers.com',
+      'http://localhost:5173',
+      'http://localhost:3000',
+      '*'
+    ];
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  methods: ['GET', 'POST', 'OPTIONS', 'PUT', 'PATCH', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Cookie'],
   credentials: true,
   methods: ['GET', 'POST', 'OPTIONS', 'PUT', 'PATCH', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
 };
 
+app.options('*', cors(corsOptions));
+
+// Force HTTPS (if behind a proxy/load balancer)
+app.use((req, res, next) => {
+  const isProduction = process.env.NODE_ENV === 'developement';
+
+  if (isProduction && req.headers['x-forwarded-proto'] !== 'https') {
+    return res.redirect(301, `https://${req.headers.host}${req.url}`);
+  }
+  next();
+});
+
+// Middlewares
+app.use(compression());
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
 
