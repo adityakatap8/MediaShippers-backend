@@ -279,4 +279,29 @@ export const getS3ObjByOrgHandler = async (req,res) => {
 };
 
 
+export const getProjectInfoById = async (req, res) => {
+    const { id } = req.params;
+  
+    try {
+      const project = await ProjectInfo.findById(id);
+  
+      if (!project) {
+        return res.status(404).json({ error: 'Project not found' });
+      }
+  
+      const { _id, projectTitle, projectPoster, trailerFile } = project;
+  
+      res.status(200).json({
+        _id,
+        projectTitle,
+        projectPoster,
+        trailerFile,
+      });
+    } catch (error) {
+      console.error('Error fetching project info by ID:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  };
+  
+
   
