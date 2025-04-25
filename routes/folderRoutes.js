@@ -40,7 +40,8 @@ import {
   uploadFileController,
   createSubfoldersController,
   getSubfolderContentsController,
-  getS3ObjByOrgHandler
+  getS3ObjByOrgHandler,
+  getProjectInfoById
 } from '../controller/folderController.js';
 import {transferFileController} from '../controller/fileTransferController.js';
 import multer from 'multer';
@@ -119,7 +120,7 @@ router.post('/create-project-folder', createFolderController); // Changed path t
 // In your routes (e.g., routes/folderRoutes.js)
 router.post('/create-subfolders', createSubfoldersController);
 
-
+router.get('/project-info/:id', getProjectInfoById);
 
 // Route to upload a file to S3
 router.post('/upload-file', uploadFileController);
