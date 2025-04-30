@@ -543,5 +543,61 @@ authRoutes.get('/all-users', async (req, res) => {
   }
 });
 
+// Get user organization data
+authRoutes.get('/user/org/:userId', async (req, res) => {
+  const { userId } = req.params;
+
+  try {
+    const validateUserId = (value) => {
+      if (typeof value !== 'string' && typeof value !== 'number') {
+        throw new Error('Invalid userId format');
+      }
+      return value;
+    };
+
+    let validatedUserId;
+    try {
+      validatedUserId = validateUserId(userId);
+      console.log('Validated User ID:', validatedUserId);
+    } catch (error) {
+      console.error('Error validating userId:', error.message);
+      return res.status(400).json({
+        success: false,
+        errorMessage: 'Invalid userId format',
+        errorDetails: 'UserId must be a valid string or number',
+      });
+    }
+
+    const user = await User.findOne({ userId: validatedUserId });
+
+    if (!user) {
+      console.error('User not found');
+      return res.status(404).json({
+        success: false,
+        errorMessage: 'User not found',
+        errorDetails: 'No user associated with this userId',
+      });
+    }
+
+    console.log('Found User:', JSON.stringify(user));
+
+    const orgData = { orgName: user.orgName };
+
+    console.log('Sending organization data:', JSON.stringify(orgData));
+
+    res.json({
+      success: true,
+      orgData,
+    });
+
+  } catch (error) {
+    console.error('Error fetching user organization data:', error.message);
+    res.status(500).json({
+      success: false,
+      errorMessage: 'Failed to fetch user organization data',
+      errorDetails: error.message,
+    });
+  }
+});
 
 export { authRoutes };

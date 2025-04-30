@@ -24,7 +24,6 @@ export const createRightsInfo = async (req, res) => {
   }
 };
 
-
 // Controller to delete a RightsInfo entry by ID
 export const deleteRightsInfo = async (req, res) => {
   try {
