@@ -69,6 +69,9 @@ const specificationsInfoSchema = new mongoose.Schema({
     duration: {
       type: String,
       
+    },
+    rating: {
+      type: String,  
     }
   }, { timestamps: true });
   

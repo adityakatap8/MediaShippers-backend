@@ -18,15 +18,6 @@ const projectInfoSchema = new mongoose.Schema({
     type: String,
     match: /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.(com|in)$/  // Email validation
   },
-  twitter: {
-    type: String,
-  },
-  facebook: {
-    type: String,
-  },
-  instagram: {
-    type: String,
-  },
   posterFileName: {
     type: String,  // Ensures that posterFileName is stored as a string
     required: false
