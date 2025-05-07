@@ -1,6 +1,7 @@
 import { MongoClient, ObjectId } from 'mongodb';
 import ProjectFormViewerService from '../services/projectFormViewerService.js';
 import multer from "multer";
+import jwt from 'jsonwebtoken'
 
 // Multer storage configuration (same as above)
 const storage = multer.diskStorage({
@@ -164,6 +165,135 @@ const projectFormDataController = {
       await client.close();
     }
   },
+
+
+  getAllProjectsWithFormData : async (req, res) => {
+    const client = new MongoClient(uri);
+    const { userId, role } = req.query; // Retrieve from query parameters
+  
+    if (!userId || !role) {
+      return res.status(400).json({ error: "Missing userId or role in request query" });
+    }
+  
+    try {
+      await client.connect();
+      const db = client.db(dbName);
+  
+      const projectInfoCollection = db.collection('projectinfos');
+      const projects = await projectInfoCollection.find({ userId: userId }).toArray();
+  
+      if (!projects || projects.length === 0) {
+        return res.status(404).json({ error: "No projects found for the given userId" });
+      }
+  
+      const projectIds = projects.map(p => p._id);
+  
+      // Fetch related projectForms
+      const projectFormsCollection = db.collection('projectforms');
+      const projectForms = await projectFormsCollection.find({ projectInfo: { $in: projectIds } }).toArray();
+  
+      // Prepare mappings and ID sets
+      const projectFormMap = {};
+      const specsIdSet = new Set();
+      const creditsIdSet = new Set();
+      const rightsIdSet = new Set();
+  
+      projectForms.forEach(form => {
+        const projectId = form.projectInfo?.toString();
+        if (projectId) {
+          projectFormMap[projectId] = form;
+  
+          if (form.specificationsInfo && ObjectId.isValid(form.specificationsInfo)) {
+            specsIdSet.add(form.specificationsInfo.toString());
+          }
+  
+          if (form.creditsInfo && ObjectId.isValid(form.creditsInfo)) {
+            creditsIdSet.add(form.creditsInfo.toString());
+          }
+  
+          if (Array.isArray(form.rightsInfo)) {
+            form.rightsInfo.forEach(rightId => {
+              if (ObjectId.isValid(rightId)) {
+                rightsIdSet.add(rightId.toString());
+              }
+            });
+          }
+        }
+      });
+  
+      // Fetch and map specificationsInfo
+      const specsIds = Array.from(specsIdSet).map(id => new ObjectId(id));
+      const specsCollection = db.collection('specificationsinfos');
+      const specsData = await specsCollection.find({ _id: { $in: specsIds } }).toArray();
+      const specsMap = {};
+      specsData.forEach(spec => {
+        specsMap[spec._id.toString()] = spec;
+      });
+  
+      // Fetch and map creditsInfo
+      const creditsIds = Array.from(creditsIdSet).map(id => new ObjectId(id));
+      const creditsCollection = db.collection('creditsinfos');
+      const creditsData = await creditsCollection.find({ _id: { $in: creditsIds } }).toArray();
+      const creditsMap = {};
+      creditsData.forEach(credit => {
+        creditsMap[credit._id.toString()] = credit;
+      });
+  
+      // Fetch and map rightsInfo from correct collection
+      const rightsIds = Array.from(rightsIdSet).map(id => new ObjectId(id));
+      const rightsCollection = db.collection('rightsInfogroups'); // ✅ Corrected collection name
+      const rightsData = await rightsCollection.find({ _id: { $in: rightsIds } }).toArray();
+      const rightsMap = {};
+      rightsData.forEach(right => {
+        rightsMap[right._id.toString()] = right;
+      });
+  
+      // Merge data into each project
+      const mergedProjects = projects.map(project => {
+        const form = projectFormMap[project._id.toString()] || null;
+  
+        if (form) {
+          // Embed specificationsInfo
+          if (form.specificationsInfo) {
+            const specIdStr = form.specificationsInfo.toString();
+            form.specificationsInfo = specsMap[specIdStr] || null;
+          }
+  
+          // Embed creditsInfo
+          if (form.creditsInfo) {
+            const creditIdStr = form.creditsInfo.toString();
+            form.creditsInfo = creditsMap[creditIdStr] || null;
+          }
+  
+          // Embed rightsInfo (as an array)
+          if (Array.isArray(form.rightsInfo) && form.rightsInfo.length > 0) {
+            form.rightsInfo = form.rightsInfo.map(id => {
+              const rightIdStr = id.toString();
+              return rightsMap[rightIdStr] || null;
+            }).filter(r => r !== null); // remove nulls
+          }
+        }
+  
+        return {
+          ...project,
+          formData: form
+        };
+      });
+  
+      res.json({
+        message: "✅ Projects, forms, and related data combined successfully",
+        projects: mergedProjects
+      });
+  
+    } catch (error) {
+      console.error("❌ Error fetching or merging data:", error.message);
+      res.status(500).json({ error: "Internal server error" });
+    } finally {
+      await client.close();
+    }
+  }
+  
+  
 };
 
 export default projectFormDataController;

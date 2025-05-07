@@ -322,7 +322,7 @@ const projectFormService = {
     try {
       const projectId =
         typeof id === "string"
-          ? mongoose.Types.ObjectId(id)
+          ? new mongoose.Types.ObjectId(id)
           : id instanceof mongoose.Types.ObjectId
           ? id
           : null;
