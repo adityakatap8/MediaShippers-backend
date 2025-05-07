@@ -26,6 +26,7 @@ import srtFileRouter from './routes/srtFileRoutes.js';
 import { deleteItemHandler } from './controller/folderController.js';
 import { authenticateToken } from './middlewares/authMiddleware.js';
 import orgRoutes from './routes/orgRoutes.js';
+import cartRoutes from './routes/cartRoutes.js'
 
 dotenv.config();
 
@@ -36,36 +37,15 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const port = process.env.PORT || 3000;
 
-// ---------------- CORS Setup ----------------
-// const corsOptions = {
-//   origin: (origin, callback) => {
-//     const allowedOrigins = [
-//       'http://localhost:5173',
-//       'http://127.0.0.1:5173',
-//       'http://localhost:3000',
-//       'http://127.0.0.1:3000',
-//     ];
-//     if (!origin || allowedOrigins.includes(origin)) {
-//       callback(null, true);
-//     } else {
-//       callback(new Error('Not allowed by CORS'));
-//     }
-//   },
-//   methods: ['GET', 'POST', 'OPTIONS', 'PUT', 'PATCH', 'DELETE'],
-//   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Cookie'],
-//   credentials: true,
-// };
-
+// ---------------- CORS Setup (MUST be first) ----------------
 const corsOptions = {
   origin: (origin, callback) => {
     const allowedOrigins = [
-      'https://www.mediashippers.com:3000',
-      'https://13.61.14.53:3000',
-      'https://172.31.27.22:3000',
-      'https://www.mediashippers.com',
       'http://localhost:5173',
       'http://localhost:3000',
-      '*'
+      'https://www.mediashippers.com',
+      'https://13.61.14.53:3000',
+      'https://172.31.27.22:3000',
     ];
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
@@ -73,37 +53,23 @@ const corsOptions = {
       callback(new Error('Not allowed by CORS'));
     }
   },
-  methods: ['GET', 'POST', 'OPTIONS', 'PUT', 'PATCH', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Cookie'],
   credentials: true,
   methods: ['GET', 'POST', 'OPTIONS', 'PUT', 'PATCH', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
 };
 
-app.options('*', cors(corsOptions));
-
-// Force HTTPS (if behind a proxy/load balancer)
-app.use((req, res, next) => {
-  const isProduction = process.env.NODE_ENV === 'production';
-
-  if (isProduction && req.headers['x-forwarded-proto'] !== 'https') {
-    return res.redirect(301, `https://${req.headers.host}${req.url}`);
-  }
-  next();
-});
-
-// Middlewares
-app.use(compression());
 app.use(cors(corsOptions));
-app.options('*', cors(corsOptions));
+app.options('*', cors(corsOptions)); // Must be early
 
+
+// ---------------- Middlewares ----------------
+app.use(compression());
 app.use(express.json());
 app.use(cookieParser());
-app.use(compression());
 
-// ---------------- Logger (morgan) ----------------
+// ---------------- Logger ----------------
 if (process.env.NODE_ENV === 'development') {
-  app.use(morgan('dev')); // Dev-friendly logs
+  app.use(morgan('dev'));
 } else {
   const logDirectory = path.resolve(__dirname, 'logs');
   if (!fs.existsSync(logDirectory)) {
@@ -114,8 +80,14 @@ if (process.env.NODE_ENV === 'development') {
 }
 
 // ---------------- Serve Static Files ----------------
-const distPath = path.join(__dirname, 'client', 'dist'); // Adjust if needed
+const distPath = path.join(__dirname, 'client', 'dist');
 app.use(express.static(distPath));
+
+// ---------------- Log incoming origin ----------------
+app.use((req, res, next) => {
+  console.log(`👉 ${req.method} request from origin: ${req.headers.origin}`);
+  next();
+});
 
 // ---------------- Public Routes ----------------
 app.use('/api/auth', authRoutes);
@@ -136,13 +108,11 @@ app.use('/api/projectsInfo', authenticateToken, projectInfoRoutes);
 app.use('/api/rightsinfo', authenticateToken, rightsInfoRoutes);
 app.use('/api/srtFile', authenticateToken, srtFileRouter);
 app.post('/api/delete-item', authenticateToken, deleteItemHandler);
-
-// ---------------Cart API's----------------
-
-// Add organization routes
 app.use('/api/organization', orgRoutes);
 
-// React app fallback
+app.use('/api/cart', cartRoutes)
+
+// ---------------- React SPA fallback ----------------
 app.get(/^\/(?!api).*/, (req, res) => {
   res.sendFile(path.join(distPath, 'index.html'));
 });
