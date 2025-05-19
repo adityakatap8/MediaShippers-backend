@@ -1,58 +1,53 @@
 import mongoose from 'mongoose';
 
 const projectInfoSchema = new mongoose.Schema({
-  projectTitle: {
-    type: String,
-    required: true
-  },
-  projectName: { 
-    type: String,
-  },
-  briefSynopsis: {
-    type: String,
-  },
-  website: {
-    type: String,
-  },
+  projectTitle: { type: String, required: true },
+  projectName: { type: String },
+  briefSynopsis: { type: String },
+  website: { type: String },
   email: {
     type: String,
-    match: /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.(com|in)$/  // Email validation
+    match: /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.(com|in)$/,
   },
-  posterFileName: {
-    type: String,  // Ensures that posterFileName is stored as a string
-    required: false
+  posterFileName: { type: String },
+  bannerFileName: { type: String },
+  trailerFileName: { type: String },
+  movieFileName: { type: String },
+  s3SourceTrailerUrl: { type: String },
+  srtFileName: { type: String },
+  infoDocFileName: { type: [String] },
+  userId: { type: String, required: true },
+   isPublic: {
+    type: String,
+    enum: ['public', 'private'],
+    default: 'private',
   },
-  bannerFileName: {
-    type: String,  // Ensures that bannerFileName is stored as a string
-    required: false
+
+  // ✅ References to other collections
+  creditsInfoId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'CreditsInfo',
   },
-  trailerFileName: {
-    type: String,  // Ensures that trailerFileName is stored as a string
-    required: false
+  specificationsInfoId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'SpecificationsInfo',
   },
-  movieFileName: {
-    type: String,  // Ensures that movieFileName is stored as a string
-    required: false
+  rightsInfoId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'RightsInfoGroup',
   },
-  s3SourceTrailerUrl: {
-    type: String,  // Ensures that trailer URL is stored as a string
-    required: false
+  screeningsInfoIds: [
+    {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'ScreeningsInfo',
+    },
+  ],
+  srtFilesId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'SrtInfoFile',
   },
-  srtFileName: { 
-    type: String,  // Ensures that SRT file name is stored as a string
-    required: false
-  },
-  infoDocFileName: { 
-    type: [String],  // Updated to specify array of strings (file names)
-    required: false
-  },
-  userId: {
-    type: String,  // This is the user reference
-    ref: 'UserId',
-    required: true
-  }
 }, {
-  timestamps: true // Automatically add createdAt and updatedAt fields
+  timestamps: true,
 });
 
 const ProjectInfo = mongoose.model('ProjectInfo', projectInfoSchema);

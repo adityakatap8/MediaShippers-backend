@@ -74,7 +74,7 @@ projectFormRouter.get('/specifications/:id', projectFormDataController.getSpecif
 // ----------------------
 // 📌 View Routes (Non-editable display logic)
 // ----------------------
-projectFormRouter.get('/view/:id', projectViewController.getProjectViewById);
+// projectFormRouter.get('/view/:id', projectViewController.getProjectViewById);
 projectFormRouter.get('/projects/:projectInfoId', projectViewController.getProjectViewById);
 
 // ----------------------

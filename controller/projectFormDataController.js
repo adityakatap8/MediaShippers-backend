@@ -167,9 +167,9 @@ const projectFormDataController = {
   },
 
 
-  getAllProjectsWithFormData : async (req, res) => {
+  getAllProjectsWithFormData: async (req, res) => {
     const client = new MongoClient(uri);
-    const { userId, role } = req.query; // Retrieve from query parameters
+    const { userId, role } = req.query;
   
     if (!userId || !role) {
       return res.status(400).json({ error: "Missing userId or role in request query" });
@@ -178,21 +178,26 @@ const projectFormDataController = {
     try {
       await client.connect();
       const db = client.db(dbName);
-  
       const projectInfoCollection = db.collection('projectinfos');
-      const projects = await projectInfoCollection.find({ userId: userId }).toArray();
+  
+      // 🔄 Role-based project fetching
+      let projects;
+      if (role === "Seller") {
+        projects = await projectInfoCollection.find({ userId: userId }).toArray();
+      } else if (role === "Buyer" || role === "Admin") {
+        projects = await projectInfoCollection.find({}).toArray();
+      } else {
+        return res.status(400).json({ error: "Invalid user role" });
+      }
   
       if (!projects || projects.length === 0) {
-        return res.status(404).json({ error: "No projects found for the given userId" });
+        return res.status(404).json({ error: "No projects found for the given criteria" });
       }
   
       const projectIds = projects.map(p => p._id);
-  
-      // Fetch related projectForms
       const projectFormsCollection = db.collection('projectforms');
       const projectForms = await projectFormsCollection.find({ projectInfo: { $in: projectIds } }).toArray();
   
-      // Prepare mappings and ID sets
       const projectFormMap = {};
       const specsIdSet = new Set();
       const creditsIdSet = new Set();
@@ -221,62 +226,59 @@ const projectFormDataController = {
         }
       });
   
-      // Fetch and map specificationsInfo
-      const specsIds = Array.from(specsIdSet).map(id => new ObjectId(id));
+      // 🔍 Fetch and map related specs
       const specsCollection = db.collection('specificationsinfos');
+      const specsIds = Array.from(specsIdSet).map(id => new ObjectId(id));
       const specsData = await specsCollection.find({ _id: { $in: specsIds } }).toArray();
       const specsMap = {};
       specsData.forEach(spec => {
         specsMap[spec._id.toString()] = spec;
       });
   
-      // Fetch and map creditsInfo
-      const creditsIds = Array.from(creditsIdSet).map(id => new ObjectId(id));
+      // 🔍 Fetch and map related credits
       const creditsCollection = db.collection('creditsinfos');
+      const creditsIds = Array.from(creditsIdSet).map(id => new ObjectId(id));
       const creditsData = await creditsCollection.find({ _id: { $in: creditsIds } }).toArray();
       const creditsMap = {};
       creditsData.forEach(credit => {
         creditsMap[credit._id.toString()] = credit;
       });
   
-      // Fetch and map rightsInfo from correct collection
+      // 🔍 Fetch and map related rights
+      const rightsCollection = db.collection('rightsInfogroups');
       const rightsIds = Array.from(rightsIdSet).map(id => new ObjectId(id));
-      const rightsCollection = db.collection('rightsInfogroups'); // ✅ Corrected collection name
       const rightsData = await rightsCollection.find({ _id: { $in: rightsIds } }).toArray();
       const rightsMap = {};
       rightsData.forEach(right => {
         rightsMap[right._id.toString()] = right;
       });
   
-      // Merge data into each project
+      // ✅ Merge all data into one unified object per project
       const mergedProjects = projects.map(project => {
-        const form = projectFormMap[project._id.toString()] || null;
+        const form = projectFormMap[project._id.toString()] || {};
   
-        if (form) {
-          // Embed specificationsInfo
-          if (form.specificationsInfo) {
-            const specIdStr = form.specificationsInfo.toString();
-            form.specificationsInfo = specsMap[specIdStr] || null;
-          }
+        if (form.specificationsInfo) {
+          const specIdStr = form.specificationsInfo.toString();
+          form.specificationsInfo = specsMap[specIdStr] || null;
+        }
   
-          // Embed creditsInfo
-          if (form.creditsInfo) {
-            const creditIdStr = form.creditsInfo.toString();
-            form.creditsInfo = creditsMap[creditIdStr] || null;
-          }
+        if (form.creditsInfo) {
+          const creditIdStr = form.creditsInfo.toString();
+          form.creditsInfo = creditsMap[creditIdStr] || null;
+        }
   
-          // Embed rightsInfo (as an array)
-          if (Array.isArray(form.rightsInfo) && form.rightsInfo.length > 0) {
-            form.rightsInfo = form.rightsInfo.map(id => {
+        if (Array.isArray(form.rightsInfo) && form.rightsInfo.length > 0) {
+          form.rightsInfo = form.rightsInfo
+            .map(id => {
               const rightIdStr = id.toString();
               return rightsMap[rightIdStr] || null;
-            }).filter(r => r !== null); // remove nulls
-          }
+            })
+            .filter(r => r !== null);
         }
   
         return {
           ...project,
-          formData: form
+          formData: form, // ✅ Always an object
         };
       });
   
@@ -292,6 +294,8 @@ const projectFormDataController = {
       await client.close();
     }
   }
+  
+  
   
   
 };
