@@ -26,7 +26,8 @@ import srtFileRouter from './routes/srtFileRoutes.js';
 import { deleteItemHandler } from './controller/folderController.js';
 import { authenticateToken } from './middlewares/authMiddleware.js';
 import orgRoutes from './routes/orgRoutes.js';
-import cartRoutes from './routes/cartRoutes.js'
+import cartRoutes from './routes/cartRoutes.js';
+import dealRoutes from './routes/dealRoutes.js';
 
 dotenv.config();
 
@@ -111,6 +112,8 @@ app.post('/api/delete-item', authenticateToken, deleteItemHandler);
 app.use('/api/organization', orgRoutes);
 
 app.use('/api/cart', cartRoutes)
+
+app.use('/api/deal', dealRoutes);
 
 // ---------------- React SPA fallback ----------------
 app.get(/^\/(?!api).*/, (req, res) => {

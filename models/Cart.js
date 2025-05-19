@@ -5,9 +5,7 @@ const cartSchema = new mongoose.Schema({
   movies: [
     {
       movieId: String,
-      title: String,
-      year: Number,
-      image: String
+      title: String
     }
   ]
 });
