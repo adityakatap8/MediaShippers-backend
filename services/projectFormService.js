@@ -284,6 +284,15 @@ const projectFormService = {
       });
   
       await projectFormDoc.save();
+
+      projectInfoDoc.creditsInfoId = creditsInfoDoc._id;
+      projectInfoDoc.specificationsInfoId = specificationsInfoDoc._id;
+      projectInfoDoc.screeningsInfoIds = screeningsInfoDocs;
+      projectInfoDoc.rightsInfoId = rightsInfoDoc?._id || null;
+      projectInfoDoc.srtInfoFileId = combinedDoc._id;
+      projectInfoDoc.projectFormId = projectFormDoc._id;
+  
+      await projectInfoDoc.save();
   
       return projectFormDoc;
     } catch (error) {

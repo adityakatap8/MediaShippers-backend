@@ -5,7 +5,8 @@ import {
   createProjectInfo,
   getProjectInfoByProjectName,
   updateProjectInfo,
-  deleteProjectInfo
+  deleteProjectInfo,
+  getProjectsByUserId
 } from '../controller/projectInfoController.js';
 
 const projectInfoRoutes = express.Router();
@@ -19,6 +20,8 @@ projectInfoRoutes.get('/:userId', getProjectInfoByProjectName);
 // Route to update project info by projectId
 projectInfoRoutes.patch('/:projectName', updateProjectInfo);
 
+// route to get the projects from the projectInfo collection by using UserId
+projectInfoRoutes.get('/userProjects/:userId', getProjectsByUserId);
 
 
 // Route to delete project info by projectId

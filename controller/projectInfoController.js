@@ -164,3 +164,31 @@ export const deleteProjectInfo = async (req, res) => {
     res.status(500).json({ message: 'Failed to delete project', error });
   }
 };
+
+export const getProjectsByUserId = async (req, res) => {
+  const { userId } = req.params;
+
+  try {
+    // Validate MongoDB ObjectId format (24 characters, hex)
+    const isValidObjectId = /^[a-fA-F0-9]{24}$/.test(userId);
+
+    if (!userId || !isValidObjectId) {
+      return res.status(400).json({ message: "Invalid userId format" });
+    }
+
+    const trimmedUserId = userId.trim();
+
+    // Fetch the projects based on the userId
+    const projects = await ProjectInfo.find({ userId: trimmedUserId });
+
+    res.status(200).json({
+      message: "Projects fetched successfully",
+      count: projects.length,
+      projects,
+    });
+  } catch (error) {
+    console.error("Error fetching projects by userId:", error);
+    res.status(500).json({ message: "Failed to fetch projects", error });
+  }
+};
+
