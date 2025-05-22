@@ -120,61 +120,95 @@ export const addMessageAndUpdateStatus = async (req, res) => {
 };
 
 export const getDealsWithCounts = async (req, res) => {
-    const { id } = req.params;
-    console.log('User ID:', id); // Log the user ID for debugging
-    try {
-        // Fetch all deals
-        const deals = await Deal.find({
-            $or: [{ senderId: id }, { assignedTo: id }]
-        });
+  const { id } = req.params; // User ID (receiverId)
 
-        // Count total deals
-        const total = deals.length;
+  try {
+    // Fetch all deals where the user is either the sender or the assigned receiver
+    const deals = await Deal.aggregate([
+      {
+        $match: {
+          $or: [{ senderId: new mongoose.Types.ObjectId(id) }, { assignedTo: new mongoose.Types.ObjectId(id) }]
+        }
+      },
+      {
+        $lookup: {
+          from: 'messages', // Join with the Message collection
+          let: { dealId: '$_id' }, // Pass the deal ID to the lookup
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ['$dealId', '$$dealId'] }, // Match messages for the current deal
+                    { $eq: ['$receiverId', new mongoose.Types.ObjectId(id)] }, // Match messages where the user is the receiver
+                    { $eq: ['$read', false] } // Match unread messages
+                  ]
+                }
+              }
+            }
+          ],
+          as: 'unreadMessages' // Store the result in the unreadMessages field
+        }
+      },
+      {
+        $addFields: {
+          unreadMessageCount: { $size: '$unreadMessages' } // Count the number of unread messages
+        }
+      },
+      {
+        $project: {
+          unreadMessages: 0 // Exclude the unreadMessages array from the final result
+        }
+      }
+    ]);
 
-        // Count pending deals
-        const pending = deals.filter(deal => deal.status === 'pending').length;
+    // Count total deals
+    const total = deals.length;
 
-        // Count closed deals
-        const closed = deals.filter(deal => deal.status === 'closed').length;
+    // Count pending deals
+    const pending = deals.filter(deal => deal.status === 'pending').length;
 
-        const active = deals.filter(
-            deal =>
-                deal.status !== 'closed' &&
-                !deal.status.startsWith('rejected_')
-        ).length;
+    // Count closed deals
+    const closed = deals.filter(deal => deal.status === 'closed').length;
 
-        const cancelled = deals.filter(
-            deal =>
-                deal.status === 'rejected_by_shipper' ||
-                deal.status === 'rejected_by_seller' ||
-                deal.status === 'rejected_by_buyer'
-        ).length;
+    const active = deals.filter(
+      deal =>
+        deal.status !== 'closed' &&
+        !deal.status.startsWith('rejected_')
+    ).length;
 
-        const shared = deals.filter(
-            deal => deal.senderId.toString() === id
-        ).length;
+    const cancelled = deals.filter(
+      deal =>
+        deal.status === 'rejected_by_shipper' ||
+        deal.status === 'rejected_by_seller' ||
+        deal.status === 'rejected_by_buyer'
+    ).length;
 
-        const received = deals.filter(
-            deal => deal.assignedTo.toString() === id
-        ).length;
+    const shared = deals.filter(
+      deal => deal.senderId.toString() === id
+    ).length;
 
-        res.status(200).json({
-            message: 'Deals retrieved successfully',
-            counts: {
-                total,
-                pending,
-                closed,
-                active,
-                cancelled,
-                shared,
-                received
-            },
-            deals
-        });
-    } catch (error) {
-        console.error('Error fetching deals and counts:', error);
-        res.status(500).json({ error: 'Failed to fetch deals and counts' });
-    }
+    const received = deals.filter(
+      deal => deal.assignedTo.toString() === id
+    ).length;
+
+    res.status(200).json({
+      message: 'Deals retrieved successfully',
+      counts: {
+        total,
+        pending,
+        closed,
+        active,
+        cancelled,
+        shared,
+        received
+      },
+      deals // Include unreadMessageCount for each deal
+    });
+  } catch (error) {
+    console.error('Error fetching deals and counts:', error);
+    res.status(500).json({ error: 'Failed to fetch deals and counts' });
+  }
 };
 
 export const getDealById = async (req, res) => {
@@ -224,11 +258,12 @@ export const getDealById = async (req, res) => {
 };
 
 export const getUnreadMessageCount = async (req, res) => {
-  const { userId } = req.params; // Extract dealId and userId from request parameters
+  const { dealId, userId } = req.params; // Extract dealId and userId from request parameters
 
   try {
     // Count unread messages for the given deal where the user is the receiver
     const unreadCount = await Message.countDocuments({
+      dealId, 
       receiverId: userId, // Only count messages where the user is the receiver
       read: false // Only count unread messages
     });
