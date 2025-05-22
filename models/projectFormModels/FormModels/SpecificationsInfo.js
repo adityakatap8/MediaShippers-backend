@@ -5,12 +5,13 @@ const specificationsInfoSchema = new mongoose.Schema({
     type: String,
   },
   genres: {
-    type: [String], // <-- Updated to array of strings
+    type: String,
+    default: '',  
   },
   runTime: {
     hours: Number,
     minutes: Number,
-    seconds: Number
+    seconds: Number,
   },
   completionDate: {
     type: Date,

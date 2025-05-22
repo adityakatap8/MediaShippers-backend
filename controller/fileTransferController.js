@@ -22,11 +22,13 @@ export const transferFileController = async (req, res) => {
 
     // Loop through the file data and transfer each file if it exists
     for (let file of transferData) {
-      if (file.fileUrl) {
+      if (file.fileUrl && typeof file.fileUrl === 'string') {
         console.log(`Transferring ${file.fileType}...`);
         const fileName = file.fileUrl.split('/').pop();  // Extracting the file name from the URL
         const result = await transferFilesBetweenBuckets(file.fileUrl, orgName, projectFolder, fileName, accessKeyId, secretAccessKey, file.fileType);
         console.log(`${file.fileType} transfer successful:`, result.message);
+      } else {
+        console.log(`Skipping ${file.fileType} as the fileUrl is invalid:`, file.fileUrl);
       }
     }
 

@@ -18,7 +18,8 @@ const projectFormController = {
         specificationsInfo,
         screeningsInfo,
         rightsInfo,
-        srtInfo,  // Get srtInfo from request body
+        srtInfo,  
+        dubbedFiles,
         userId,
       } = req.body;
   
@@ -29,6 +30,7 @@ const projectFormController = {
       console.log("📜 Received specificationsInfo:", JSON.stringify(specificationsInfo, null, 2));
       console.log("📜 Received screeningsInfo:", JSON.stringify(screeningsInfo, null, 2));
       console.log("📜 Received rightsInfo:", JSON.stringify(rightsInfo, null, 2));
+
   
       // Combine srtFiles and infoDocs into one single object (srtInfo)
       const combinedSrtInfo = {
@@ -48,7 +50,8 @@ const projectFormController = {
         specificationsInfo,
         screeningsInfo,
         rightsInfo,
-        combinedSrtInfo,  // Pass the combined srtInfo to the service
+        combinedSrtInfo,
+        dubbedFiles,
         userId
       );
   

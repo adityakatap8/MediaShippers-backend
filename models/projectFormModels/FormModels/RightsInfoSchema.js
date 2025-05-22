@@ -20,7 +20,9 @@ const RightsInfoGroupSchema = new mongoose.Schema(
     territories: [
       {
         name: { type: String },
-        id: { type: Number },
+        id: { type: String }, // ✅ changed from Number to String
+        country: { type: String },
+        region: { type: String },
       },
     ],
 

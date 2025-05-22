@@ -170,136 +170,169 @@ import SpecificationsInfo from "../models/projectFormModels/FormModels/Specifica
 import ScreeningsInfo from "../models/projectFormModels/FormModels/ScreeningInfoSchema.js";
 import RightsInfoGroup from "../models/projectFormModels/FormModels/RightsInfoSchema.js";
 import SrtInfoFileSchema from "../models/projectFormModels/FormModels/SrtInfoFileSchema.js";
+import DubbedFiles from "../models/projectFormModels/FormModels/DubbedFilesSchema.js";
 
 const projectFormService = {
  
-  createProjectForm: async (
-    projectInfo,
-    creditsInfo,
-    specificationsInfo,
-    screeningsInfo,
-    rightsInfo,
-    srtInfo,  // Now this is the combined object with srtFiles and infoDocuments
-    userId
-  ) => {
-    try {
-      const cleanUserId =
-        typeof userId === "string" && userId.trim()
-          ? userId.trim()
-          : projectInfo?.userId?.trim?.() || "";
-  
-      if (!cleanUserId) {
-        throw new Error("userId is missing or invalid.");
-      }
-  
-      const normalizeFileName = (file) => {
-        if (typeof file === "object" && file?.filePath) {
-          return file.filePath.split("/").pop();
-        }
-        if (typeof file === "string") {
-          return file;
-        }
-        return "";
-      };
-  
-      const projectData = {
-        ...projectInfo,
-        userId: cleanUserId,
-        posterFileName: normalizeFileName(projectInfo.posterFileName),
-        bannerFileName: normalizeFileName(projectInfo.bannerFileName),
-        trailerFileName: normalizeFileName(projectInfo.trailerFileName),
-        movieFileName: normalizeFileName(projectInfo.movieFileName),
-      };
-  
-      // Save screenings
-      let screeningsInfoDocs = [];
-      if (Array.isArray(screeningsInfo)) {
-        screeningsInfoDocs = await Promise.all(
-          screeningsInfo.map(async (screening) => {
-            const doc = new ScreeningsInfo(screening);
-            await doc.save();
-            return doc._id;
-          })
-        );
-      }
-  
-      // Save rights info
-      let rightsInfoDoc = null;
-      if (rightsInfo && Object.keys(rightsInfo).length > 0) {
-        const doc = new RightsInfoGroup(rightsInfo);
-        await doc.save();
-        rightsInfoDoc = doc;
-      }
-  
-      // Save project core sections
-      const projectInfoDoc = new ProjectInfoSchema(projectData);
-      const creditsInfoDoc = new CreditsInfoSchema(creditsInfo);
-      const specificationsInfoDoc = new SpecificationsInfo(specificationsInfo);
-  
-      await projectInfoDoc.save();
-      await creditsInfoDoc.save();
-      await specificationsInfoDoc.save();
-  
-      // ✅ Process combined srtInfo (srtFiles and infoDocuments)
-      let combinedSrtFiles = [];
-      let combinedInfoDocs = [];
-  
-      // Ensure srtInfo is an object with srtFiles and infoDocuments arrays
-      if (srtInfo) {
-        combinedSrtFiles = srtInfo.srtFiles.filter(file => file !== null).map(file => ({
-          fileName: file.fileName,
-          filePath: file.filePath,
-          fileType: file.fileType,
-          fileSize: file.fileSize,
-        }));
-  
-        combinedInfoDocs = srtInfo.infoDocuments.filter(file => file !== null).map(file => ({
-          fileName: file.fileName,
-          filePath: file.filePath,
-          fileType: file.fileType,
-          fileSize: file.fileSize,
-        }));
-      }
-  
-      // Create the SrtInfoFileSet document with combined arrays
-      const combinedDoc = new SrtInfoFileSchema({
-        srtFiles: combinedSrtFiles,  // Store all srtFiles here
-        infoDocFiles: combinedInfoDocs,  // Store all infoDocFiles here
-        userId: cleanUserId,
-        projectName: projectInfo.projectName,
-        orgName: projectInfo.orgName || "",
-      });
-  
-      await combinedDoc.save();
-  
-      // Save final ProjectForm with references to SrtInfoFileSet
-      const projectFormDoc = new ProjectForm({
-        projectInfo: projectInfoDoc._id,
-        creditsInfo: creditsInfoDoc._id,
-        specificationsInfo: specificationsInfoDoc._id,
-        screeningsInfo: screeningsInfoDocs,
-        rightsInfo: rightsInfoDoc?._id,
-        srtFiles: [combinedDoc._id],  // Store reference to SrtInfoFileSet document
-        infoDocs: [],  // Optional: remove this if no longer needed
-      });
-  
-      await projectFormDoc.save();
+createProjectForm: async (
+  projectInfo,
+  creditsInfo,
+  specificationsInfo,
+  screeningsInfo,
+  rightsInfo,
+  srtInfo,
+  dubbedFiles,
+  userId
+) => {
+  try {
+    const cleanUserId =
+      typeof userId === "string" && userId.trim()
+        ? userId.trim()
+        : projectInfo?.userId?.trim?.() || "";
 
-      projectInfoDoc.creditsInfoId = creditsInfoDoc._id;
-      projectInfoDoc.specificationsInfoId = specificationsInfoDoc._id;
-      projectInfoDoc.screeningsInfoIds = screeningsInfoDocs;
-      projectInfoDoc.rightsInfoId = rightsInfoDoc?._id || null;
-      projectInfoDoc.srtInfoFileId = combinedDoc._id;
-      projectInfoDoc.projectFormId = projectFormDoc._id;
-  
-      await projectInfoDoc.save();
-  
-      return projectFormDoc;
-    } catch (error) {
-      console.error("❌ Error in service:", error);
-      throw new Error("Error saving project form: " + error.message);
+    if (!cleanUserId) {
+      throw new Error("userId is missing or invalid.");
     }
-  },
+
+    // ✅ Normalize file name from object or string
+    const normalizeFileName = (file) => {
+      if (file && typeof file === 'object' && file.fileName) {
+        return file.fileName;
+      }
+      if (typeof file === 'string') {
+        return file;
+      }
+      return '';
+    };
+
+    // ✅ Normalize s3SourceTrailerUrl if it’s an object
+    if (
+      projectInfo.s3SourceTrailerUrl &&
+      typeof projectInfo.s3SourceTrailerUrl === 'object' &&
+      projectInfo.s3SourceTrailerUrl.fileUrl
+    ) {
+      projectInfo.s3SourceTrailerUrl = projectInfo.s3SourceTrailerUrl.fileUrl;
+    }
+
+    const projectData = {
+      ...projectInfo,
+      userId: cleanUserId,
+      posterFileName: normalizeFileName(projectInfo.posterFileName),
+      bannerFileName: normalizeFileName(projectInfo.bannerFileName),
+      trailerFileName: normalizeFileName(projectInfo.trailerFileName),
+      movieFileName: normalizeFileName(projectInfo.movieFileName),
+    };
+
+    // ✅ Convert genres from array of objects to comma-separated string
+    if (Array.isArray(specificationsInfo.genres)) {
+      specificationsInfo.genres = specificationsInfo.genres
+        .map((g) => typeof g === 'string' ? g : g?.name)
+        .filter(Boolean)
+        .join(', ')
+        .toLowerCase();
+    }
+
+    // 🟩 Save screenings
+    let screeningsInfoDocs = [];
+    if (Array.isArray(screeningsInfo)) {
+      screeningsInfoDocs = await Promise.all(
+        screeningsInfo.map(async (screening) => {
+          const doc = new ScreeningsInfo(screening);
+          await doc.save();
+          return doc._id;
+        })
+      );
+    }
+
+    // 🟩 Save rightsInfo (multiple entries)
+    let rightsInfoDocs = [];
+    if (rightsInfo && typeof rightsInfo === "object") {
+      for (const key in rightsInfo) {
+        const doc = new RightsInfoGroup({
+          ...rightsInfo[key],
+          userId: cleanUserId,
+          projectName: projectInfo.projectName,
+        });
+        await doc.save();
+        rightsInfoDocs.push(doc._id);
+      }
+    }
+
+    // 🟩 Save core sections
+    const projectInfoDoc = new ProjectInfoSchema(projectData);
+    const creditsInfoDoc = new CreditsInfoSchema(creditsInfo);
+    const specificationsInfoDoc = new SpecificationsInfo(specificationsInfo);
+
+    await projectInfoDoc.save();
+    await creditsInfoDoc.save();
+    await specificationsInfoDoc.save();
+
+    // 🟩 Parse SRT info
+    let combinedSrtFiles = [];
+    let combinedInfoDocs = [];
+
+    if (Array.isArray(srtInfo)) {
+      srtInfo.forEach((item) => {
+        if (item.srtFile) {
+          combinedSrtFiles.push(item.srtFile);
+        }
+        if (item.infoDocFile) {
+          combinedInfoDocs.push(item.infoDocFile);
+        }
+      });
+    }
+
+    const combinedDoc = new SrtInfoFileSchema({
+      srtFiles: combinedSrtFiles,
+      infoDocFiles: combinedInfoDocs,
+      userId: cleanUserId,
+      projectName: projectInfo.projectName,
+      orgName: projectInfo.orgName || "",
+    });
+
+    await combinedDoc.save();
+
+    // ✅ Dubbed Files: Save as one grouped document
+    let dubbedFileDoc = null;
+    if (Array.isArray(dubbedFiles) && dubbedFiles.length > 0) {
+      dubbedFileDoc = new DubbedFiles({
+        projectId: projectInfoDoc._id,
+        dubbedFiles: dubbedFiles,
+      });
+      await dubbedFileDoc.save();
+    }
+
+    // 🟩 Create and save final ProjectForm
+    const projectFormDoc = new ProjectForm({
+      projectInfo: projectInfoDoc._id,
+      creditsInfo: creditsInfoDoc._id,
+      specificationsInfo: specificationsInfoDoc._id,
+      screeningsInfo: screeningsInfoDocs,
+      rightsInfo: rightsInfoDocs,
+      srtFiles: [combinedDoc._id],
+      dubbedFiles: dubbedFileDoc ? [dubbedFileDoc._id] : [],
+    });
+
+    await projectFormDoc.save();
+
+    // 🔗 Attach foreign keys back to projectInfo doc
+    projectInfoDoc.creditsInfoId = creditsInfoDoc._id;
+    projectInfoDoc.specificationsInfoId = specificationsInfoDoc._id;
+    projectInfoDoc.screeningsInfoIds = screeningsInfoDocs;
+    projectInfoDoc.rightsInfoId = rightsInfoDocs[0] || null;
+    projectInfoDoc.srtInfoFileId = combinedDoc._id;
+    projectInfoDoc.projectFormId = projectFormDoc._id;
+
+    await projectInfoDoc.save();
+
+    return projectFormDoc;
+  } catch (error) {
+    console.error("❌ Error in service:", error);
+    throw new Error("Error saving project form: " + error.message);
+  }
+},
+
+
   
 
 

@@ -1,22 +1,26 @@
 import mongoose from 'mongoose';
 
-const singleDubbedFileSchema = new mongoose.Schema({
-  dubbedTrailerFileName: { type: String },
-  dubbedTrailerUrl: { type: String },       // Optional S3 URL
-  dubbedSubtitleFileName: { type: String },
-  language: { type: String, required: true }, // Language field added
-}, { _id: false }); // _id disabled for embedded documents
-
-const dubbedFilesSchema = new mongoose.Schema({
-  projectId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'ProjectInfo',
-    required: true,
+const singleDubbedFileSchema = new mongoose.Schema(
+  {
+    dubbedTrailerFileName: { type: String },
+    dubbedTrailerUrl: { type: String }, // S3 or blob URL
+    dubbedSubtitleFileName: { type: String },
+    language: { type: String, required: true },
+    localVideoUrl: { type: String }, // Added for UI reference or upload preview
   },
-  dubbedFiles: [singleDubbedFileSchema],
-}, {
-  timestamps: true,
-});
+  { _id: false }
+);
+
+const dubbedFilesSchema = new mongoose.Schema(
+  {
+    projectName: { type: String, required: true }, // ✅ Changed from projectId
+    userId: { type: String, required: true },      // ✅ For linking with the user
+    dubbedFiles: [singleDubbedFileSchema],
+  },
+  {
+    timestamps: true,
+  }
+);
 
 const DubbedFiles = mongoose.model('DubbedFiles', dubbedFilesSchema);
 export default DubbedFiles;
