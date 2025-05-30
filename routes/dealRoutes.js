@@ -1,5 +1,5 @@
 import express from 'express';
-import { addMessageAndUpdateStatus, createDealWithMessage, getDealById, getDealsWithCounts, getUnreadMessageCount, markMessagesAsRead, getMessageHistory } from '../controller/dealController.js';
+import { addMessageAndUpdateStatus, createDealWithMessage, getDealById, getDealsWithCounts, getUnreadMessageCount, markMessagesAsRead, getMessageHistory, splitDealToSellers, sellerActionOnMovies } from '../controller/dealController.js';
 
 const router = express.Router();
 
@@ -20,5 +20,9 @@ router.post('/:dealId/mark-read/:userId', markMessagesAsRead);
 
 // Route to get message history for a deal
 router.get('/:dealId/message-history', getMessageHistory);
+
+router.post('/split-to-sellers', splitDealToSellers);
+
+router.patch('/:dealId/action', sellerActionOnMovies);
 
 export default router;

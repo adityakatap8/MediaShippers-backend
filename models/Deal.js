@@ -1,8 +1,21 @@
 import mongoose from 'mongoose';
 
+const movieStatusSchema = new mongoose.Schema({
+    movieId: { type: String, required: true },
+    projectTitle: { type: String },
+    userId: { type: String },
+    status: {
+      type: String,
+      enum: ['pending', 'accepted', 'rejected', 'negotiation'],
+      default: 'pending'
+    },
+    remarks: { type: String, default: '' }, // optional comments or negotiation notes
+    updatedAt: { type: Date, default: Date.now }
+  });
+
 const dealSchema = new mongoose.Schema({
     senderId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-    movies: [{ movieId: String, projectTitle: String }],
+    movies: [movieStatusSchema],
     rights: [String],
     territory: [String],
     licenseTerm: [String],
@@ -10,6 +23,7 @@ const dealSchema = new mongoose.Schema({
     paymentTerms: [String],
     remarks: String,
     assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    parentDealId: { type: mongoose.Schema.Types.ObjectId, ref: 'Deal', default: null },
     status: {
         type: String,
         enum: [

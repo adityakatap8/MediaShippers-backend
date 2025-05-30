@@ -151,6 +151,20 @@ export const getDealsWithCounts = async (req, res) => {
         }
       },
       {
+        $lookup: {
+          from: 'projectinfos', // The name of the projectInfo collection
+          let: { movieIds: '$movies.movieId' }, // Pass movieId array to the lookup
+          pipeline: [
+            {
+              $match: {
+                $expr: { $in: ['$_id', { $map: { input: '$$movieIds', as: 'id', in: { $toObjectId: '$$id' } } }] } // Match _id in projectInfo with movieId
+              }
+            }
+          ],
+          as: 'movieDetails' // Join projectInfo data into movieDetails
+        }
+      },
+      {
         $addFields: {
           unreadMessageCount: { $size: '$unreadMessages' } // Count the number of unread messages
         }
@@ -318,3 +332,115 @@ export const getMessageHistory = async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch message history' });
   }
 };
+
+export const splitDealToSellers = async (req, res) => {
+  try {
+    const { dealId } = req.body;
+
+    const existingDeal = await Deal.findById(dealId);
+    if (!existingDeal) return res.status(404).json({ message: 'Deal not found' });
+    console.log('Splitting deal:', existingDeal);
+    const movieDetails = existingDeal.movies;
+    console.log('Movie details in deal:', movieDetails);
+    if (!movieDetails || movieDetails.length === 0) {
+      return res.status(400).json({ message: 'No movie details available in deal' });
+    }
+
+    // Group movies by userId (seller)
+    const sellerMap = {};
+    movieDetails.forEach((movie) => {
+      const sellerId = movie.userId?.toString();
+      if (!sellerId) return;
+
+      if (!sellerMap[sellerId]) {
+        sellerMap[sellerId] = [];
+      }
+      sellerMap[sellerId].push({
+        movieId: movie.movieId,
+      });
+    });
+
+    const createdDeals = [];
+
+    // Create a deal per seller
+    for (const [sellerId, movies] of Object.entries(sellerMap)) {
+      const newDeal = new Deal({
+        senderId: existingDeal.senderId,
+        movies,
+        rights: existingDeal.rights,
+        territory: existingDeal.territory,
+        licenseTerm: existingDeal.licenseTerm,
+        usageRights: existingDeal.usageRights,
+        paymentTerms: existingDeal.paymentTerms,
+        remarks: existingDeal.remarks,
+        assignedTo: sellerId,
+        status: 'sent_to_seller',
+        history: [],
+        parentDealId: existingDeal._id,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
+
+      const savedDeal = await newDeal.save();
+      createdDeals.push(savedDeal);
+    }
+
+    return res.status(200).json({
+      message: 'Deals successfully created for each seller',
+      count: createdDeals.length,
+      deals: createdDeals
+    });
+
+  } catch (error) {
+    console.error('Error splitting deal:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+
+
+export const sellerActionOnMovies = async (req, res) => {
+  try {
+    const { dealId } = req.params;
+    const { movies } = req.body;
+
+    console.log('Seller action on movies:', movies);
+
+    if (!Array.isArray(movies) || movies.length === 0) {
+      return res.status(400).json({ message: 'No movie actions provided' });
+    }
+
+    const deal = await Deal.findById(dealId);
+    if (!deal) return res.status(404).json({ message: 'Deal not found' });
+
+    let updated = false;
+
+    movies.forEach(({ movieId, status, remarks }) => {
+      if (!['accepted', 'rejected', 'negotiation'].includes(status)) return;
+
+      const movie = deal.movies.find(m => m.movieId === movieId);
+      if (movie) {
+        movie.status = status;
+        movie.remarks = remarks || '';
+        movie.updatedAt = new Date();
+        updated = true;
+      }
+    });
+
+    console.log('Updated movies:', updated);
+
+    if (!updated) return res.status(400).json({ message: 'No valid movie updates found' });
+
+    deal.status = 'deal_from_seller';
+
+    deal.updatedAt = new Date();
+    await deal.save();
+    console.log('Deal after updates:', deal);
+    return res.status(200).json({ message: 'Movie statuses updated', deal });
+
+  } catch (error) {
+    console.error('Error in seller action:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
