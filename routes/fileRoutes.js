@@ -1,62 +1,162 @@
-// routes/uploadRoutes.js
+// routes/fileRoutes.js
 
 import express from 'express';
-import { uploadFileHandler } from '../controller/fileController.js';
-import { uploadFileToS3 } from '../services/s3Service.js';
 import multer from 'multer';
-
-const upload = multer();  // Using multer to handle the files
+import { uploadFileToS3 } from '../services/s3Service.js';
+import ProjectInfo from '../models/projectFormModels/FormModels/ProjectInfoSchema.js';
+import SrtInfoFileSet from '../models/projectFormModels/FormModels/SrtInfoFileSchema.js';
 
 const router = express.Router();
+const upload = multer();
 
-router.post('/upload-file', upload.fields([
-  { name: 'projectPoster', maxCount: 1 },
-  { name: 'projectBanner', maxCount: 1 },
-  { name: 'projectTrailer', maxCount: 1 }
-]), async (req, res) => {
+router.post('/upload-file', upload.any(), async (req, res) => {
   try {
-    const files = [];
+    console.log('===== 📦 DEBUG: Received multipart form data =====');
+    console.log('📝 req.body:', req.body);
+    console.log('📎 req.files:', req.files);
 
-    if (req.files.projectPoster) {
-      files.push({ ...req.files.projectPoster[0], type: 'projectPoster' });
-    }
-    if (req.files.projectBanner) {
-      files.push({ ...req.files.projectBanner[0], type: 'projectBanner' });
-    }
-    if (req.files.projectTrailer) {
-      files.push({ ...req.files.projectTrailer[0], type: 'projectTrailer' });
+    const { orgName, projectName, userId } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ message: 'userId is required' });
     }
 
-    const orgName = req.body.orgName;
-    const projectName = req.body.projectName;
+    const files = req.files.map((file) => {
+      let type = '';
+      let language = null;
+
+      if (file.fieldname === 'projectPoster') type = 'projectPoster';
+      else if (file.fieldname === 'projectBanner') type = 'projectBanner';
+      else if (file.fieldname === 'projectTrailer') type = 'projectTrailer';
+      else if (file.fieldname.startsWith('dubbedTrailer_')) {
+        type = 'dubbedTrailer';
+        const index = file.fieldname.split('_')[1];
+        language = req.body[`dubbedTrailerLang_${index}`];
+      } else if (file.fieldname.startsWith('dubbedSubtitle_')) {
+        type = 'dubbedSubtitle';
+        const index = file.fieldname.split('_')[1];
+        language = req.body[`dubbedSubtitleLang_${index}`];
+      } else if (file.fieldname.startsWith('srtFile_')) {
+        type = 'srtFile';
+      } else if (file.fieldname.startsWith('infoDocFile_')) {
+        type = 'infoDocFile';
+      }
+
+      return { ...file, type, language };
+    });
 
     const fileUrls = await uploadFileToS3(orgName, projectName, files);
 
     const response = {
       message: 'Files uploaded successfully.',
+      dubbedFiles: [],
+      srtFiles: [],
+      infoDocuments: [],
+      projectPosterUrl: '',
+      projectBannerUrl: '',
+      projectTrailerUrl: ''
     };
 
+    const dubbedFilesMap = {};
+    const srtFilesForDb = [];
+    const infoDocFilesForDb = [];
+
     files.forEach((file, index) => {
-      if (file.type === 'projectPoster') response.projectPosterUrl = {
+      const fileUrl = fileUrls[index];
+      const meta = {
         fileName: file.originalname,
-        fileUrl: fileUrls[index]
+        fileUrl: fileUrl
       };
-      if (file.type === 'projectBanner') response.projectBannerUrl = {
-        fileName: file.originalname,
-        fileUrl: fileUrls[index]
-      };
-      if (file.type === 'projectTrailer') response.projectTrailerUrl = {
-        fileName: file.originalname,
-        fileUrl: fileUrls[index]
-      };
+
+      switch (file.type) {
+        case 'projectPoster':
+          response.projectPosterUrl = fileUrl;
+          break;
+        case 'projectBanner':
+          response.projectBannerUrl = fileUrl;
+          break;
+        case 'projectTrailer':
+          response.projectTrailerUrl = fileUrl;
+          break;
+        case 'dubbedTrailer':
+        case 'dubbedSubtitle':
+          if (!dubbedFilesMap[file.language]) {
+            dubbedFilesMap[file.language] = { language: file.language };
+          }
+          if (file.type === 'dubbedTrailer') {
+            dubbedFilesMap[file.language].dubbedTrailer = meta;
+          } else {
+            dubbedFilesMap[file.language].dubbedSubtitle = meta;
+          }
+          break;
+        case 'srtFile':
+          response.srtFiles.push(meta);
+          srtFilesForDb.push(meta);
+          break;
+        case 'infoDocFile':
+          response.infoDocuments.push(meta);
+          infoDocFilesForDb.push(meta);
+          break;
+      }
     });
 
-    res.json(response);
+    const dubbedArray = Object.values(dubbedFilesMap);
+    if (dubbedArray.length > 0) {
+      response.dubbedFiles = dubbedArray;
+
+      await ProjectInfo.findOneAndUpdate(
+        { projectName },
+        {
+          $set: {
+            dubbedFileData: dubbedArray.map(df => ({
+              language: df.language,
+              dubbedTrailerFileName: df.dubbedTrailer?.fileName || '',
+              dubbedTrailerUrl: df.dubbedTrailer?.fileUrl || '',
+              dubbedSubtitleFileName: df.dubbedSubtitle?.fileName || '',
+              dubbedSubtitleUrl: df.dubbedSubtitle?.fileUrl || ''
+            }))
+          }
+        },
+        { new: true }
+      );
+    }
+
+    if (srtFilesForDb.length > 0 || infoDocFilesForDb.length > 0) {
+      console.log('📥 Preparing to save to SrtInfoFileSet collection...');
+      console.log('🔡 SRT Files to Save:', JSON.stringify(srtFilesForDb, null, 2));
+      console.log('📄 Info Documents to Save:', JSON.stringify(infoDocFilesForDb, null, 2));
+      console.log('🧾 Metadata =>', { userId, projectName, orgName });
+
+      await SrtInfoFileSet.findOneAndUpdate(
+        { userId, projectName },
+        {
+          $set: {
+            orgName,
+            srtFiles: srtFilesForDb,
+            infoDocuments: infoDocFilesForDb
+          }
+        },
+        { upsert: true, new: true }
+      );
+
+      console.log('✅ SRT Info and InfoDocs saved successfully.');
+    }
+
+    res.status(200).json({
+      ...response,
+      srtInfo: {
+        srtFiles: srtFilesForDb,
+        infoDocuments: infoDocFilesForDb,
+        projectName,
+        orgName,
+        userId
+      }
+    });
+
   } catch (error) {
-    console.error('Error in file upload route:', error);
+    console.error('❌ Error in file upload route:', error);
     res.status(500).send(error.message);
   }
 });
-
 
 export default router;

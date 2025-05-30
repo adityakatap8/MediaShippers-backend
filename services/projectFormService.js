@@ -89,14 +89,14 @@
 //       } else {
 //         throw new Error('Invalid project ID format');
 //       }
-  
+
 //       // First, find the project form document
 //       const projectForm = await ProjectForm.findOne({ projectInfo: projectId });
-      
+
 //       if (!projectForm) {
 //         return null;
 //       }
-  
+
 //       // Then, populate the nested documents
 //       return await projectForm.populate({
 //         path: ['projectInfo', 'submitterInfo', 'creditsInfo', 'specificationsInfo', 'screeningsInfo'],
@@ -173,12 +173,11 @@ import SrtInfoFileSchema from "../models/projectFormModels/FormModels/SrtInfoFil
 import DubbedFiles from "../models/projectFormModels/FormModels/DubbedFilesSchema.js";
 
 const projectFormService = {
- 
+
 createProjectForm: async (
   projectInfo,
   creditsInfo,
   specificationsInfo,
-  screeningsInfo,
   rightsInfo,
   srtInfo,
   dubbedFiles,
@@ -194,26 +193,21 @@ createProjectForm: async (
       throw new Error("userId is missing or invalid.");
     }
 
-    // ✅ Normalize file name from object or string
     const normalizeFileName = (file) => {
-      if (file && typeof file === 'object' && file.fileName) {
-        return file.fileName;
-      }
-      if (typeof file === 'string') {
-        return file;
-      }
-      return '';
+      if (file && typeof file === "object" && file.fileName) return file.fileName;
+      if (typeof file === "string") return file;
+      return "";
     };
 
-    // ✅ Normalize s3SourceTrailerUrl if it’s an object
     if (
       projectInfo.s3SourceTrailerUrl &&
-      typeof projectInfo.s3SourceTrailerUrl === 'object' &&
+      typeof projectInfo.s3SourceTrailerUrl === "object" &&
       projectInfo.s3SourceTrailerUrl.fileUrl
     ) {
       projectInfo.s3SourceTrailerUrl = projectInfo.s3SourceTrailerUrl.fileUrl;
     }
 
+    // Prepare main project info
     const projectData = {
       ...projectInfo,
       userId: cleanUserId,
@@ -223,28 +217,27 @@ createProjectForm: async (
       movieFileName: normalizeFileName(projectInfo.movieFileName),
     };
 
-    // ✅ Convert genres from array of objects to comma-separated string
+    // Embed dubbed files
+    if (Array.isArray(dubbedFiles) && dubbedFiles.length > 0) {
+      projectData.dubbedFileData = dubbedFiles.map((file) => ({
+        language: file.language,
+        dubbedTrailerFileName: file.dubbedTrailerFileName || '',
+        dubbedTrailerUrl: file.dubbedTrailerUrl || '',
+        dubbedSubtitleFileName: file.dubbedSubtitleFileName || '',
+        dubbedSubtitleUrl: file.dubbedSubtitleUrl || '',
+      }));
+    }
+
+    // Convert genres to string
     if (Array.isArray(specificationsInfo.genres)) {
       specificationsInfo.genres = specificationsInfo.genres
-        .map((g) => typeof g === 'string' ? g : g?.name)
+        .map((g) => (typeof g === "string" ? g : g?.name))
         .filter(Boolean)
-        .join(', ')
+        .join(", ")
         .toLowerCase();
     }
 
-    // 🟩 Save screenings
-    let screeningsInfoDocs = [];
-    if (Array.isArray(screeningsInfo)) {
-      screeningsInfoDocs = await Promise.all(
-        screeningsInfo.map(async (screening) => {
-          const doc = new ScreeningsInfo(screening);
-          await doc.save();
-          return doc._id;
-        })
-      );
-    }
-
-    // 🟩 Save rightsInfo (multiple entries)
+    // Save rights info
     let rightsInfoDocs = [];
     if (rightsInfo && typeof rightsInfo === "object") {
       for (const key in rightsInfo) {
@@ -258,7 +251,7 @@ createProjectForm: async (
       }
     }
 
-    // 🟩 Save core sections
+    // Save main schemas
     const projectInfoDoc = new ProjectInfoSchema(projectData);
     const creditsInfoDoc = new CreditsInfoSchema(creditsInfo);
     const specificationsInfoDoc = new SpecificationsInfo(specificationsInfo);
@@ -267,24 +260,25 @@ createProjectForm: async (
     await creditsInfoDoc.save();
     await specificationsInfoDoc.save();
 
-    // 🟩 Parse SRT info
-    let combinedSrtFiles = [];
-    let combinedInfoDocs = [];
+    // ✅ Parse SRT info
+    const combinedSrtFiles = Array.isArray(srtInfo?.srtFiles) ? srtInfo.srtFiles : [];
+    const combinedInfoDocs = Array.isArray(srtInfo?.infoDocuments) ? srtInfo.infoDocuments : [];
 
-    if (Array.isArray(srtInfo)) {
-      srtInfo.forEach((item) => {
-        if (item.srtFile) {
-          combinedSrtFiles.push(item.srtFile);
-        }
-        if (item.infoDocFile) {
-          combinedInfoDocs.push(item.infoDocFile);
-        }
-      });
-    }
+    // ✅ Simplified mapping for updated schema
+    const srtFilesMapped = combinedSrtFiles.map((file) => ({
+      fileName: file.fileName || '',
+      fileUrl: file.filePath || file.fileUrl || '',
+    }));
 
+    const infoDocsMapped = combinedInfoDocs.map((file) => ({
+      fileName: file.fileName || '',
+      fileUrl: file.filePath || file.fileUrl || '',
+    }));
+
+    // ✅ Save combined SRT + InfoDocs document
     const combinedDoc = new SrtInfoFileSchema({
-      srtFiles: combinedSrtFiles,
-      infoDocFiles: combinedInfoDocs,
+      srtFiles: srtFilesMapped,
+      infoDocuments: infoDocsMapped,
       userId: cleanUserId,
       projectName: projectInfo.projectName,
       orgName: projectInfo.orgName || "",
@@ -292,35 +286,22 @@ createProjectForm: async (
 
     await combinedDoc.save();
 
-    // ✅ Dubbed Files: Save as one grouped document
-    let dubbedFileDoc = null;
-    if (Array.isArray(dubbedFiles) && dubbedFiles.length > 0) {
-      dubbedFileDoc = new DubbedFiles({
-        projectId: projectInfoDoc._id,
-        dubbedFiles: dubbedFiles,
-      });
-      await dubbedFileDoc.save();
-    }
-
-    // 🟩 Create and save final ProjectForm
+    // ✅ Create final project form
     const projectFormDoc = new ProjectForm({
       projectInfo: projectInfoDoc._id,
       creditsInfo: creditsInfoDoc._id,
       specificationsInfo: specificationsInfoDoc._id,
-      screeningsInfo: screeningsInfoDocs,
       rightsInfo: rightsInfoDocs,
       srtFiles: [combinedDoc._id],
-      dubbedFiles: dubbedFileDoc ? [dubbedFileDoc._id] : [],
     });
 
     await projectFormDoc.save();
 
-    // 🔗 Attach foreign keys back to projectInfo doc
+    // ✅ Link back references
     projectInfoDoc.creditsInfoId = creditsInfoDoc._id;
     projectInfoDoc.specificationsInfoId = specificationsInfoDoc._id;
-    projectInfoDoc.screeningsInfoIds = screeningsInfoDocs;
     projectInfoDoc.rightsInfoId = rightsInfoDocs[0] || null;
-    projectInfoDoc.srtInfoFileId = combinedDoc._id;
+    projectInfoDoc.srtFilesId = combinedDoc._id;
     projectInfoDoc.projectFormId = projectFormDoc._id;
 
     await projectInfoDoc.save();
@@ -330,16 +311,18 @@ createProjectForm: async (
     console.error("❌ Error in service:", error);
     throw new Error("Error saving project form: " + error.message);
   }
-},
+}
+
+,
 
 
-  
 
 
-  
-    
-  
-  
+
+
+
+
+
   getAllProjects: async () => {
     try {
       return await ProjectInfoSchema.find();
@@ -366,8 +349,8 @@ createProjectForm: async (
         typeof id === "string"
           ? new mongoose.Types.ObjectId(id)
           : id instanceof mongoose.Types.ObjectId
-          ? id
-          : null;
+            ? id
+            : null;
 
       if (!projectId) {
         throw new Error("Invalid project ID format");

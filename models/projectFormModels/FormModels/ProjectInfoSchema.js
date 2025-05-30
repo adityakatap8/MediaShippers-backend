@@ -1,5 +1,17 @@
 import mongoose from 'mongoose';
 
+// 🔽 Define the embedded schema for each dubbed file
+const dubbedFileSchema = new mongoose.Schema(
+  {
+    language: { type: String, required: true },
+    dubbedTrailerFileName: { type: String },
+    dubbedTrailerUrl: { type: String }, // S3 URL
+    dubbedSubtitleFileName: { type: String },
+    dubbedSubtitleUrl: { type: String } // S3 URL
+  },
+  { _id: false }
+);
+
 const projectInfoSchema = new mongoose.Schema({
   projectTitle: { type: String, required: true },
   projectName: { type: String },
@@ -17,11 +29,14 @@ const projectInfoSchema = new mongoose.Schema({
   srtFileName: { type: String },
   infoDocFileName: { type: [String] },
   userId: { type: String, required: true },
-   isPublic: {
+  isPublic: {
     type: String,
     enum: ['public', 'private'],
     default: 'private',
   },
+
+  // 🔽 Embed dubbed file data here
+  dubbedFileData: [dubbedFileSchema],
 
   // ✅ References to other collections
   creditsInfoId: {
