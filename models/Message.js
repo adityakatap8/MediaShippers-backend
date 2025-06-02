@@ -5,8 +5,9 @@ const messageSchema = new mongoose.Schema({
   senderId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   receiverId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   message: { type: String },
-  read: { type: Boolean, default: false }, // New field to track if the message has been read
-  timestamp: { type: Date, default: Date.now }
+  read: { type: Boolean, default: false }, // Track if the message has been read
+  timestamp: { type: Date, default: Date.now },
+  visibleTo: { type: [String], default: [] } // Array of roles that can view the message (e.g., ['admin', 'buyer', 'seller'])
 });
 
 const Message = mongoose.model('Message', messageSchema);

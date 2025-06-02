@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import Deal from '../models/Deal.js';
 import Message from '../models/Message.js';
 import { Cart } from '../models/Cart.js';
+import { User } from '../models/User.js';
 
 export const createDealWithMessage = async (req, res) => {
     const {
@@ -82,41 +83,59 @@ export const createDealWithMessage = async (req, res) => {
 
 
 export const addMessageAndUpdateStatus = async (req, res) => {
-    const { dealId } = req.params; // Deal ID from the request parameters
-    const { senderId, receiverId, message, status } = req.body; // Message details and new status
+  const { dealId } = req.params; // Deal ID from the request parameters
+  const { senderId, receiverId, message } = req.body; // Include sender and receiver roles
 
-    try {
-        const deal = await Deal.findById(dealId);
+  try {
+    const deal = await Deal.findById(dealId);
 
-        if (!deal) {
-            return res.status(404).json({ error: 'Deal not found' });
-        }
-
-
-        // if (status) {
-        //     deal.status = status;
-        //     await deal.save();
-        // }
-
-
-        const newMessage = new Message({
-            dealId,
-            senderId,
-            receiverId,
-            message
-        });
-
-        const savedMessage = await newMessage.save();
-
-        res.status(201).json({
-            message: 'Message added and deal status updated successfully',
-            updatedDeal: deal,
-            savedMessage
-        });
-    } catch (error) {
-        console.error('Error adding message and updating status:', error);
-        res.status(500).json({ error: 'Failed to add message and update status' });
+    if (!deal) {
+      return res.status(404).json({ error: 'Deal not found' });
     }
+
+    const sender = await User.findById(senderId);
+    const receiver = await User.findById(receiverId);
+
+    if (!sender || !receiver) {
+      return res.status(404).json({ error: 'Sender or receiver not found' });
+    }
+
+    const senderRole = sender.role;
+    const receiverRole = receiver.role;
+
+    console.log('Sender Role:', senderRole);
+    console.log('Receiver Role:', receiverRole);
+
+    // Determine visibility based on roles
+    let visibleTo = [];
+    if (senderRole === 'Buyer' && receiverRole === 'Admin') {
+      visibleTo = ['Admin', 'Buyer']; // Admin and Buyer can see this message
+    } else if (senderRole === 'Admin' && receiverRole === 'Buyer') {
+      visibleTo = ['Admin', 'Buyer']; // Admin and Buyer can see this message
+    } else if (senderRole === 'Admin' && receiverRole === 'Seller') {
+      visibleTo = ['Admin', 'Seller']; // Admin and Seller can see this message
+    } else if (senderRole === 'Seller' && receiverRole === 'Admin') {
+      visibleTo = ['Admin', 'Seller']; // Admin and seller can see this message
+    }
+
+    const newMessage = new Message({
+      dealId,
+      senderId,
+      receiverId,
+      message,
+      visibleTo
+    });
+
+    const savedMessage = await newMessage.save();
+
+    res.status(201).json({
+      message: 'Message added successfully',
+      savedMessage
+    });
+  } catch (error) {
+    console.error('Error adding message:', error);
+    res.status(500).json({ error: 'Failed to add message' });
+  }
 };
 
 export const getDealsWithCounts = async (req, res) => {
@@ -201,7 +220,6 @@ export const getDealsWithCounts = async (req, res) => {
     const shared = deals.filter(
       deal => deal.senderId.toString() === id
     ).length;
-
     const received = deals.filter(
       deal => deal.assignedTo.toString() === id
     ).length;
@@ -314,10 +332,45 @@ export const markMessagesAsRead = async (req, res) => {
 
 export const getMessageHistory = async (req, res) => {
   const { dealId } = req.params; // Extract dealId from request parameters
+  const { loggedInUserId, loggedInUserRole, selectedUserId } = req.query; // Extract logged-in user ID, role, and selected user ID from query parameters
 
   try {
-    // Find all messages for the given dealId, sorted by timestamp
-    const messages = await Message.find({ dealId }).sort({ timestamp: 1 });
+    // Validate input
+    if (!loggedInUserId || !loggedInUserRole) {
+      return res.status(400).json({ message: 'Logged-in user ID and role are required' });
+    }
+
+    // Build the query based on the logged-in user's role
+    let query;
+
+    if (loggedInUserRole === 'Admin') {
+      
+      query = {
+        dealId,
+        visibleTo: loggedInUserRole, // Ensure messages are visible to admin
+        $or: [
+          { senderId: loggedInUserId, receiverId: selectedUserId }, // Messages sent by admin to the selected user
+          { senderId: selectedUserId, receiverId: loggedInUserId }  // Messages sent by the selected user to admin
+        ]
+      };
+    } else if (loggedInUserRole === 'Buyer' || loggedInUserRole === 'Seller') {
+      // Buyer or seller viewing chat with admin
+      query = {
+        dealId,
+        visibleTo: loggedInUserRole, // Ensure messages are visible to the buyer/seller
+        $or: [
+          { senderId: loggedInUserId, receiverId: { $ne: loggedInUserId } }, // Messages sent by buyer/seller to admin
+          { senderId: { $ne: loggedInUserId }, receiverId: loggedInUserId }  // Messages sent by admin to buyer/seller
+        ]
+      };
+    } else {
+      return res.status(400).json({ message: 'Invalid user role' });
+    }
+
+    console.log('Query for message history:', query);
+
+    // Find all messages for the given dealId, filtered by query and sorted by timestamp
+    const messages = await Message.find(query).sort({ timestamp: 1 });
 
     if (!messages || messages.length === 0) {
       return res.status(404).json({ message: 'No messages found for this deal' });
