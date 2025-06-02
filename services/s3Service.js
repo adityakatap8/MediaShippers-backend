@@ -210,54 +210,65 @@ if (!S3_BUCKET_PATH) {
 //     }
 // });
 
+
 export const uploadFileToS3 = async (orgName, projectName, files) => {
-    const uploadedFiles = [];
+  const uploadedFiles = [];
 
-    for (const file of files) {
-        if (!file || !file.originalname || !file.buffer || !file.mimetype) {
-            throw new Error('Invalid file data encountered.');
-        }
-
-        let filePath;
-        if (file.type === 'projectPoster' || file.type === 'projectBanner') {
-            filePath = `${orgName}/${projectName}/film stills/${file.originalname}`;
-        } else if (file.type === 'projectTrailer') {
-            filePath = `${orgName}/${projectName}/trailer/${file.originalname}`;
-        } else {
-            throw new Error(`Unknown file type: ${file.type}`);
-        }
-
-        const fullS3Path = `${S3_BUCKET_PATH}/${filePath}`;
-        const bucketName = S3_BUCKET_PATH.split('/')[2];
-
-        try {
-            const params = {
-                Bucket: bucketName,
-                Key: filePath,
-                Body: file.buffer,
-                ContentType: file.mimetype
-            };
-
-            const uploadResult = await s3.upload(params).promise();
-            console.log('S3 upload result:', uploadResult);
-            uploadedFiles.push(uploadResult);
-        } catch (error) {
-            console.error('Error uploading file to S3:', error);
-            throw new Error(`Error uploading file to S3: ${error.message}`);
-        }
+  for (const file of files) {
+    if (!file || !file.originalname || !file.buffer || !file.mimetype) {
+      throw new Error('Invalid file data encountered.');
     }
 
-    const fileUrls = uploadedFiles.map(result => {
-        if (result && result.Key) {
-            return `${S3_BUCKET_PATH}/${result.Key}`;
-        } else {
-            console.error('Error: result.Key is undefined:', result);
-            return 'Error: file upload failed';
-        }
-    });
+    let filePath;
 
-    return fileUrls;
+    if (file.type === 'projectPoster' || file.type === 'projectBanner') {
+      filePath = `${orgName}/${projectName}/film stills/${file.originalname}`;
+
+    } else if (file.type === 'projectTrailer') {
+      filePath = `${orgName}/${projectName}/trailer/${file.originalname}`;
+
+    } else if (file.type === 'dubbedTrailer') {
+      const language = file.language || 'unknown';
+      filePath = `${orgName}/${projectName}/trailer/${language}/${file.originalname}`;
+
+    } else if (file.type === 'dubbedSubtitle') {
+      const language = file.language || 'unknown';
+      filePath = `${orgName}/${projectName}/srt files/${language}/${file.originalname}`;
+
+    } else if (file.type === 'srtFile') {
+       delete file.language; 
+      filePath = `${orgName}/${projectName}/srt files/${file.originalname}`;
+
+    } else if (file.type === 'infoDocFile') {
+      filePath = `${orgName}/${projectName}/srt files/${file.originalname}`;
+
+    } else {
+      throw new Error(`Unknown file type: ${file.type}`);
+    }
+
+    const bucketName = S3_BUCKET_PATH.split('/')[2];
+
+    const params = {
+      Bucket: bucketName,
+      Key: filePath,
+      Body: file.buffer,
+      ContentType: file.mimetype
+    };
+
+    try {
+      const uploadResult = await s3.upload(params).promise();
+      console.log('S3 upload result:', uploadResult);
+      uploadedFiles.push(uploadResult);
+    } catch (error) {
+      console.error('Error uploading to S3:', error);
+      throw new Error(`Error uploading file to S3: ${error.message}`);
+    }
+  }
+
+  return uploadedFiles.map(result => `${S3_BUCKET_PATH}/${result.Key}`);
 };
+
+
 
 
 

@@ -8,11 +8,9 @@ const specificationsInfoSchema = new mongoose.Schema({
     type: String,
     default: '',  
   },
-  runTime: {
-    hours: Number,
-    minutes: Number,
-    seconds: Number,
-  },
+ runtime: {
+  type: String
+},
   completionDate: {
     type: Date,
   },
