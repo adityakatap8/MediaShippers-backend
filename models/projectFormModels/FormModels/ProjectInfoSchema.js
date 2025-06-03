@@ -51,12 +51,6 @@ const projectInfoSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'RightsInfoGroup',
   },
-  screeningsInfoIds: [
-    {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'ScreeningsInfo',
-    },
-  ],
   srtFilesId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'SrtInfoFile',

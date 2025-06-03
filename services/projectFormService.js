@@ -199,6 +199,7 @@ createProjectForm: async (
       return "";
     };
 
+    // Normalize trailer URL if it's in object form
     if (
       projectInfo.s3SourceTrailerUrl &&
       typeof projectInfo.s3SourceTrailerUrl === "object" &&
@@ -226,6 +227,10 @@ createProjectForm: async (
         dubbedSubtitleFileName: file.dubbedSubtitleFileName || '',
         dubbedSubtitleUrl: file.dubbedSubtitleUrl || '',
       }));
+
+      console.log("🟢 Dubbed files processed:", projectData.dubbedFileData);
+    } else {
+      console.log("ℹ️ No dubbed files provided or empty array.");
     }
 
     // Convert genres to string
@@ -235,36 +240,70 @@ createProjectForm: async (
         .filter(Boolean)
         .join(", ")
         .toLowerCase();
+
+      console.log("🟢 Normalized genres:", specificationsInfo.genres);
     }
 
-    // Save rights info
-    let rightsInfoDocs = [];
+    // ======= FIXED rightsInfo handling - unwrap nested arrays =======
+    let rightsInfoDoc = null;
     if (rightsInfo && typeof rightsInfo === "object") {
-      for (const key in rightsInfo) {
-        const doc = new RightsInfoGroup({
-          ...rightsInfo[key],
-          userId: cleanUserId,
-          projectName: projectInfo.projectName,
-        });
-        await doc.save();
-        rightsInfoDocs.push(doc._id);
+      let rightsArray = [];
+      let territoriesArray = [];
+      let licenseTermArray = [];
+      let platformTypeArray = [];
+      let usageRightsArray = [];
+      let paymentTermsArray = [];
+      let listPriceValue = '';
+
+      if (Array.isArray(rightsInfo.rights) && rightsInfo.rights.length > 0) {
+        // Assuming the first element contains the actual rights info object
+        const firstRightsInfo = rightsInfo.rights[0];
+
+        rightsArray = Array.isArray(firstRightsInfo.rights) ? firstRightsInfo.rights : [];
+        territoriesArray = Array.isArray(firstRightsInfo.territories) ? firstRightsInfo.territories : [];
+        licenseTermArray = Array.isArray(firstRightsInfo.licenseTerm) ? firstRightsInfo.licenseTerm : [];
+        platformTypeArray = Array.isArray(firstRightsInfo.platformType) ? firstRightsInfo.platformType : [];
+        usageRightsArray = Array.isArray(firstRightsInfo.usageRights) ? firstRightsInfo.usageRights : [];
+        paymentTermsArray = Array.isArray(firstRightsInfo.paymentTerms) ? firstRightsInfo.paymentTerms : [];
+        listPriceValue = firstRightsInfo.listPrice || '';
       }
+
+      rightsInfoDoc = new RightsInfoGroup({
+        userId: cleanUserId,
+        projectName: projectInfo.projectName,
+        rights: rightsArray,
+        territories: territoriesArray,
+        licenseTerm: licenseTermArray,
+        platformType: platformTypeArray,
+        usageRights: usageRightsArray,
+        paymentTerms: paymentTermsArray,
+        listPrice: listPriceValue,
+      });
+
+      await rightsInfoDoc.save();
+      console.log("🟢 RightsInfoGroup saved:", rightsInfoDoc);
+    } else {
+      console.log("ℹ️ No rightsInfo object provided or invalid.");
     }
+    // ===========================================================================
 
     // Save main schemas
     const projectInfoDoc = new ProjectInfoSchema(projectData);
-    const creditsInfoDoc = new CreditsInfoSchema(creditsInfo);
-    const specificationsInfoDoc = new SpecificationsInfo(specificationsInfo);
-
     await projectInfoDoc.save();
-    await creditsInfoDoc.save();
-    await specificationsInfoDoc.save();
+    console.log("🟢 ProjectInfoSchema saved:", projectInfoDoc);
 
-    // ✅ Parse SRT info
+    const creditsInfoDoc = new CreditsInfoSchema(creditsInfo);
+    await creditsInfoDoc.save();
+    console.log("🟢 CreditsInfoSchema saved:", creditsInfoDoc);
+
+    const specificationsInfoDoc = new SpecificationsInfo(specificationsInfo);
+    await specificationsInfoDoc.save();
+    console.log("🟢 SpecificationsInfo saved:", specificationsInfoDoc);
+
+    // Parse and normalize SRT info
     const combinedSrtFiles = Array.isArray(srtInfo?.srtFiles) ? srtInfo.srtFiles : [];
     const combinedInfoDocs = Array.isArray(srtInfo?.infoDocuments) ? srtInfo.infoDocuments : [];
 
-    // ✅ Simplified mapping for updated schema
     const srtFilesMapped = combinedSrtFiles.map((file) => ({
       fileName: file.fileName || '',
       fileUrl: file.filePath || file.fileUrl || '',
@@ -275,7 +314,6 @@ createProjectForm: async (
       fileUrl: file.filePath || file.fileUrl || '',
     }));
 
-    // ✅ Save combined SRT + InfoDocs document
     const combinedDoc = new SrtInfoFileSchema({
       srtFiles: srtFilesMapped,
       infoDocuments: infoDocsMapped,
@@ -285,26 +323,29 @@ createProjectForm: async (
     });
 
     await combinedDoc.save();
+    console.log("🟢 SrtInfoFileSchema saved:", combinedDoc);
 
-    // ✅ Create final project form
+    // Create final project form
     const projectFormDoc = new ProjectForm({
       projectInfo: projectInfoDoc._id,
       creditsInfo: creditsInfoDoc._id,
       specificationsInfo: specificationsInfoDoc._id,
-      rightsInfo: rightsInfoDocs,
+      rightsInfo: rightsInfoDoc ? [rightsInfoDoc._id] : [],
       srtFiles: [combinedDoc._id],
     });
 
     await projectFormDoc.save();
+    console.log("🟢 ProjectForm saved:", projectFormDoc);
 
-    // ✅ Link back references
+    // Link back references
     projectInfoDoc.creditsInfoId = creditsInfoDoc._id;
     projectInfoDoc.specificationsInfoId = specificationsInfoDoc._id;
-    projectInfoDoc.rightsInfoId = rightsInfoDocs[0] || null;
+    projectInfoDoc.rightsInfoId = rightsInfoDoc ? rightsInfoDoc._id : null;
     projectInfoDoc.srtFilesId = combinedDoc._id;
     projectInfoDoc.projectFormId = projectFormDoc._id;
 
     await projectInfoDoc.save();
+    console.log("🟢 ProjectInfoDoc updated with references:", projectInfoDoc);
 
     return projectFormDoc;
   } catch (error) {
@@ -313,14 +354,8 @@ createProjectForm: async (
   }
 }
 
+
 ,
-
-
-
-
-
-
-
 
 
   getAllProjects: async () => {
