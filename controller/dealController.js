@@ -5,80 +5,102 @@ import { Cart } from '../models/Cart.js';
 import { User } from '../models/User.js';
 
 export const createDealWithMessage = async (req, res) => {
-    const {
-        senderId,
-        receiverId,
-        movies,
-        rights,
-        territory,
-        licenseTerm,
-        usageRights,
-        paymentTerms,
-        status,
-        remarks,
-        message
-    } = req.body;
+  const {
+    senderId,
+    receiverId,
+    movies,
+    rights,
+    territory,
+    licenseTerm,
+    usageRights,
+    paymentTerms,
+    status,
+    remarks,
+    message
+  } = req.body;
 
-    console.log("message", message);
+  console.log("message", message);
 
-    try {
-        // Create the deal
-        const deal = new Deal({
-            senderId,
-            assignedTo: receiverId,
-            movies,
-            rights,
-            territory,
-            licenseTerm,
-            usageRights,
-            paymentTerms,
-            status: status || 'pending',
-            remarks
-        });
+  try {
+    // Create the deal
+    const deal = new Deal({
+      senderId,
+      assignedTo: receiverId,
+      movies,
+      rights,
+      territory,
+      licenseTerm,
+      usageRights,
+      paymentTerms,
+      status: status || 'pending',
+      remarks
+    });
 
-        const savedDeal = await deal.save();
+    const sender = await User.findById(senderId);
+    const receiver = await User.findById(receiverId);
 
-        // Create the message linked to the deal
-        const newMessage = new Message({
-            dealId: savedDeal._id,
-            senderId: message.senderId,
-            receiverId,
-            message: message.content
-        });
-
-        const savedMessage = await newMessage.save();
-
-        // Update the deal's history with the new message ID
-        savedDeal.history.push(savedMessage._id);
-        await savedDeal.save();
-
-        console.log('Deal created:', movies);
-
-        // Extract movie IDs as strings
-        const movieIds = movies.map(movie => String(movie.movieId));
-        console.log('Movie IDs to remove:', movieIds);
-
-        // Remove the submitted movies from the cart
-        await Cart.updateOne(
-            { userId: senderId }, // Find the cart for the user
-            { $pull: { movies: { movieId: { $in: movieIds } } } } // Remove movies by movieId
-        );
-
-        // Fetch the updated cart to get the remaining movies
-        const updatedCart = await Cart.findOne({ userId: senderId });
-
-        console.log('Updated cart:', updatedCart);
-
-        res.status(201).json({
-            message: 'Deal created, initial message added, and movies removed from cart successfully',
-            deal: savedDeal,
-            initialMessage: savedMessage,
-            remainingMovies: updatedCart ? updatedCart.movies : [] // Return remaining movies
-        });
-    } catch (error) {
-        console.error('Error creating deal and message:', error);
-        res.status(500).json({ error: 'Failed to create deal and message' });
+    if (!sender || !receiver) {
+      return res.status(404).json({ error: 'Sender or receiver not found' });
     }
+
+    const senderRole = sender.role;
+    const receiverRole = receiver.role;
+
+    const savedDeal = await deal.save();
+
+    let visibleTo = [];
+    if (senderRole === 'Buyer' && receiverRole === 'Admin') {
+      visibleTo = ['Admin', 'Buyer']; // Admin and Buyer can see this message
+    } else if (senderRole === 'Admin' && receiverRole === 'Buyer') {
+      visibleTo = ['Admin', 'Buyer']; // Admin and Buyer can see this message
+    } else if (senderRole === 'Admin' && receiverRole === 'Seller') {
+      visibleTo = ['Admin', 'Seller']; // Admin and Seller can see this message
+    } else if (senderRole === 'Seller' && receiverRole === 'Admin') {
+      visibleTo = ['Admin', 'Seller']; // Admin and seller can see this message
+    }
+
+    // Create the message linked to the deal
+    const newMessage = new Message({
+      dealId: savedDeal._id,
+      senderId: message.senderId,
+      receiverId,
+      message: message.content,
+      visibleTo
+    });
+
+    const savedMessage = await newMessage.save();
+
+    // Update the deal's history with the new message ID
+    savedDeal.history.push(savedMessage._id);
+    await savedDeal.save();
+
+    console.log('Deal created:', movies);
+
+    // Extract movie IDs as strings
+    const movieIds = movies.map(movie => String(movie.movieId));
+    console.log('Movie IDs to remove:', movieIds);
+
+    // Remove the submitted movies from the cart
+    await Cart.updateOne(
+      { userId: senderId }, // Find the cart for the user
+      { $pull: { movies: { movieId: { $in: movieIds } } } } // Remove movies by movieId
+    );
+
+    // Fetch the updated cart to get the remaining movies
+    const updatedCart = await Cart.findOne({ userId: senderId });
+
+    console.log('Updated cart:', updatedCart);
+
+    res.status(201).json({
+      message: 'Deal created, initial message added, and movies removed from cart successfully',
+      deal: savedDeal,
+      initialMessage: savedMessage,
+      remainingMovies: updatedCart ? updatedCart.movies : [] // Return remaining movies
+    });
+  } catch (error) {
+    console.error('Error creating deal and message:', error);
+    res.status(500).json({ error: 'Failed to create deal and message' });
+  }
 };
 
 
@@ -295,7 +317,7 @@ export const getUnreadMessageCount = async (req, res) => {
   try {
     // Count unread messages for the given deal where the user is the receiver
     const unreadCount = await Message.countDocuments({
-      dealId, 
+      dealId,
       receiverId: userId, // Only count messages where the user is the receiver
       read: false // Only count unread messages
     });
@@ -330,46 +352,102 @@ export const markMessagesAsRead = async (req, res) => {
   }
 };
 
+// export const getMessageHistory = async (req, res) => {
+//   const { dealId } = req.params; // Extract dealId from request parameters
+//   const { loggedInUserId, loggedInUserRole, selectedUserId } = req.query; // Extract logged-in user ID, role, and selected user ID from query parameters
+
+//   try {
+//     // Validate input
+//     if (!loggedInUserId || !loggedInUserRole) {
+//       return res.status(400).json({ message: 'Logged-in user ID and role are required' });
+//     }
+
+//     // Build the query based on the logged-in user's role
+//     let query;
+
+//     if (loggedInUserRole === 'Admin') {
+
+//       query = {
+//         dealId,
+//         visibleTo: loggedInUserRole, // Ensure messages are visible to admin
+//         $or: [
+//           { senderId: loggedInUserId, receiverId: selectedUserId }, // Messages sent by admin to the selected user
+//           { senderId: selectedUserId, receiverId: loggedInUserId }  // Messages sent by the selected user to admin
+//         ]
+//       };
+//     } else if (loggedInUserRole === 'Buyer' || loggedInUserRole === 'Seller') {
+//       // Buyer or seller viewing chat with admin
+//       query = {
+//         dealId,
+//         visibleTo: loggedInUserRole, // Ensure messages are visible to the buyer/seller
+//         $or: [
+//           { senderId: loggedInUserId, receiverId: { $ne: loggedInUserId } }, // Messages sent by buyer/seller to admin
+//           { senderId: { $ne: loggedInUserId }, receiverId: loggedInUserId }  // Messages sent by admin to buyer/seller
+//         ]
+//       };
+//     } else {
+//       return res.status(400).json({ message: 'Invalid user role' });
+//     }
+
+//     console.log('Query for message history:', query);
+
+//     // Find all messages for the given dealId, filtered by query and sorted by timestamp
+//     const messages = await Message.find(query).sort({ timestamp: 1 });
+
+//     if (!messages || messages.length === 0) {
+//       return res.status(404).json({ message: 'No messages found for this deal' });
+//     }
+
+//     res.status(200).json({
+//       message: 'Message history retrieved successfully',
+//       history: messages
+//     });
+//   } catch (error) {
+//     console.error('Error fetching message history:', error);
+//     res.status(500).json({ error: 'Failed to fetch message history' });
+//   }
+// };
+
+
 export const getMessageHistory = async (req, res) => {
   const { dealId } = req.params; // Extract dealId from request parameters
   const { loggedInUserId, loggedInUserRole, selectedUserId } = req.query; // Extract logged-in user ID, role, and selected user ID from query parameters
 
   try {
     // Validate input
+    if (!dealId || !mongoose.Types.ObjectId.isValid(dealId)) {
+      return res.status(400).json({ message: 'Invalid or missing dealId' });
+    }
+
     if (!loggedInUserId || !loggedInUserRole) {
       return res.status(400).json({ message: 'Logged-in user ID and role are required' });
     }
 
-    // Build the query based on the logged-in user's role
-    let query;
+    // Find all related deals using parentDealId
+    const relatedDeals = await Deal.find({ $or: [{ _id: dealId }, { parentDealId: dealId }] }).select('_id');
+    const relatedDealIds = relatedDeals.map(deal => deal._id);
 
-    if (loggedInUserRole === 'Admin') {
-      
-      query = {
-        dealId,
-        visibleTo: loggedInUserRole, // Ensure messages are visible to admin
-        $or: [
-          { senderId: loggedInUserId, receiverId: selectedUserId }, // Messages sent by admin to the selected user
-          { senderId: selectedUserId, receiverId: loggedInUserId }  // Messages sent by the selected user to admin
-        ]
-      };
-    } else if (loggedInUserRole === 'Buyer' || loggedInUserRole === 'Seller') {
-      // Buyer or seller viewing chat with admin
-      query = {
-        dealId,
-        visibleTo: loggedInUserRole, // Ensure messages are visible to the buyer/seller
-        $or: [
-          { senderId: loggedInUserId, receiverId: { $ne: loggedInUserId } }, // Messages sent by buyer/seller to admin
-          { senderId: { $ne: loggedInUserId }, receiverId: loggedInUserId }  // Messages sent by admin to buyer/seller
-        ]
-      };
+    // Build the query based on the logged-in user's role
+    let query = {
+      dealId: { $in: relatedDealIds }, // Fetch messages for all related deals
+      visibleTo: loggedInUserRole, // Ensure messages are visible to the logged-in user's role
+    };
+
+    // If admin selects a specific user, filter messages by senderId and receiverId
+    if (loggedInUserRole === 'Admin' && selectedUserId) {
+      query.$or = [
+        { senderId: loggedInUserId, receiverId: selectedUserId }, // Messages sent by admin to the selected user
+        { senderId: selectedUserId, receiverId: loggedInUserId }  // Messages sent by the selected user to admin
+      ];
     } else {
-      return res.status(400).json({ message: 'Invalid user role' });
+      // Default behavior: Admin sees all messages visible to them
+      query.$or = [
+        { senderId: loggedInUserId }, // Messages sent by admin
+        { receiverId: loggedInUserId } // Messages received by admin
+      ];
     }
 
-    console.log('Query for message history:', query);
-
-    // Find all messages for the given dealId, filtered by query and sorted by timestamp
+    // Find all messages for the related deals, filtered by query and sorted by timestamp
     const messages = await Message.find(query).sort({ timestamp: 1 });
 
     if (!messages || messages.length === 0) {
@@ -385,6 +463,7 @@ export const getMessageHistory = async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch message history' });
   }
 };
+
 
 export const splitDealToSellers = async (req, res) => {
   try {
