@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 
-// 🔽 Define the embedded schema for each dubbed file
+// Embedded schema for dubbed files
 const dubbedFileSchema = new mongoose.Schema(
   {
     language: { type: String, required: true },
@@ -22,10 +22,15 @@ const projectInfoSchema = new mongoose.Schema({
     match: /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.(com|in)$/,
   },
   posterFileName: { type: String },
+  projectPosterS3Url: { type: String }, // ✅
+
   bannerFileName: { type: String },
+  projectBannerS3Url: { type: String }, // ✅
+
   trailerFileName: { type: String },
+  projectTrailerS3Url: { type: String },
+
   movieFileName: { type: String },
-  s3SourceTrailerUrl: { type: String },
   srtFileName: { type: String },
   infoDocFileName: { type: [String] },
   userId: { type: String, required: true },
@@ -35,29 +40,16 @@ const projectInfoSchema = new mongoose.Schema({
     default: 'private',
   },
 
-  // 🔽 Embed dubbed file data here
   dubbedFileData: [dubbedFileSchema],
 
-  // ✅ References to other collections
-  creditsInfoId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'CreditsInfo',
-  },
-  specificationsInfoId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'SpecificationsInfo',
-  },
-  rightsInfoId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'RightsInfoGroup',
-  },
-  srtFilesId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'SrtInfoFile',
-  },
+  creditsInfoId: { type: mongoose.Schema.Types.ObjectId, ref: 'CreditsInfo' },
+  specificationsInfoId: { type: mongoose.Schema.Types.ObjectId, ref: 'SpecificationsInfo' },
+  rightsInfoId: { type: mongoose.Schema.Types.ObjectId, ref: 'RightsInfoGroup' },
+  srtFilesId: { type: mongoose.Schema.Types.ObjectId, ref: 'SrtInfoFile' },
 }, {
   timestamps: true,
 });
+
 
 const ProjectInfo = mongoose.model('ProjectInfo', projectInfoSchema);
 

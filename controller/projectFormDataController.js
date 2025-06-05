@@ -6,7 +6,7 @@ import jwt from 'jsonwebtoken';
 // Mongoose models
 import ProjectForm from '../models/projectFormModels/ProjectForm.js';
 import ProjectInfo from '../models/projectFormModels/FormModels/ProjectInfoSchema.js';
-import SubmitterInfo from '../models/projectFormModels/FormModels/SubmitterInfoSchema.js';
+
 import CreditsInfo from '../models/projectFormModels/FormModels/CreditsInfoSchema.js';
 import SpecificationsInfo from '../models/projectFormModels/FormModels/SpecificationsInfo.js';
 import RightsInfoGroup from '../models/projectFormModels/FormModels/RightsInfoSchema.js'; // ✅ Correct
@@ -46,29 +46,52 @@ const upload = multer({
 
 const projectFormDataController = {
   // Fetch project form data
-  getProjectFormData: async (req, res) => {
-    const { id: projectId } = req.params;
+getProjectFormData: async (req, res) => {
+  const { id: projectId } = req.params;
 
-    try {
-      if (!mongoose.Types.ObjectId.isValid(projectId)) {
-        return res.status(400).json({ error: 'Invalid ID format' });
-      }
-
-      const projectData = await ProjectFormViewerService.getProjectFormData(projectId);
-      const populatedProject = {
-        ...projectData,
-        projectInfo: await ProjectInfo.findById(projectData.projectInfo),
-        submitterInfo: await SubmitterInfo.findById(projectData.submitterInfo),
-        creditsInfo: await CreditsInfo.findById(projectData.creditsInfo),
-        specificationsInfo: await SpecificationsInfo.findById(projectData.specificationsInfo),
-      };
-
-      res.json(populatedProject);
-    } catch (error) {
-      console.error('Error fetching project data:', error.message);
-      res.status(500).json({ error: 'Internal server error' });
+  try {
+    if (!mongoose.Types.ObjectId.isValid(projectId)) {
+      return res.status(400).json({ error: 'Invalid ID format' });
     }
-  },
+
+    const objectId = new mongoose.Types.ObjectId(projectId);
+
+    // Correctly find the ProjectForm where projectInfo matches the _id
+    const projectForm = await ProjectForm.findOne({ projectInfo: objectId });
+
+    if (!projectForm) {
+      return res.status(404).json({ error: 'Project form not found' });
+    }
+
+    // Populate all related documents
+    const [
+      projectInfo,
+      creditsInfo,
+      specificationsInfo,
+      rightsInfo,
+    ] = await Promise.all([
+      ProjectInfo.findById(projectForm.projectInfo),
+      CreditsInfo.findById(projectForm.creditsInfo),
+      SpecificationsInfo.findById(projectForm.specificationsInfo),
+      RightsInfoGroup.findById(projectForm.rightsInfo?.[0]), // In case rightsInfo is an array
+    ]);
+
+    const responseData = {
+      ...projectForm.toObject(),
+      projectInfo,
+      creditsInfo,
+      specificationsInfo,
+      rightsInfo,
+    };
+
+    res.json(responseData);
+  } catch (error) {
+    console.error('Error fetching project data:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+,
+
 
   // Update project form data
   updateProjectFormData: async (req, res) => {
@@ -86,7 +109,7 @@ const projectFormDataController = {
 
       const sectionMappings = {
         projectInfo: 'projectInfo',
-        submitterInfo: 'submitterInfo',
+        
         creditsInfo: 'creditsInfo',
         specificationsInfo: 'specificationsInfo',
         screeningsInfo: 'screeningsInfo',

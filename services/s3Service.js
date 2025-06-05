@@ -11,6 +11,9 @@ const s3 = new AWS.S3({
     signatureVersion: 'v4',
 });
 
+const S3_BUCKET_PATH = process.env.S3_BUCKET_PATH;  
+const BUCKET_NAME = process.env.S3_BUCKET_NAME;
+
 // Folder creation in S3
 export const createFolder = async (orgName, projectName) => {
     const folderPath = `${orgName}/${projectName}/`; // Constructing folder structure with orgName and projectName
@@ -66,149 +69,12 @@ export const createSubfoldersController = async (req, res) => {
 };
 
 
-// File upload to S3
-// export const uploadFile = async (orgName, projectName, files) => {
-//     const folderPath = `${orgName}/${projectName}/`; // Construct folder path
 
-//     // Create an array of promises for uploading each file
-//     const uploadPromises = files.map(file => {
-//         const params = {
-//             Bucket: process.env.S3_BUCKET_NAME,
-//             Key: `${folderPath}${file.originalname}`, // Upload to correct folder path
-//             Body: file.buffer,
-//             ContentType: file.mimetype, // Ensure Content-Type is set
-//         };
-
-//         // Upload each file and return the upload result
-//         return s3.upload(params).promise();
-//     });
-
-//     try {
-//         // Wait for all file uploads to complete
-//         const uploadResults = await Promise.all(uploadPromises);
-
-//         // Log the results for each file
-//         uploadResults.forEach(result => {
-//             console.log(`File ${result.Key} uploaded successfully.`, result);
-//         });
-
-//         return uploadResults; // Return the results for all uploaded files
-//     } catch (error) {
-//         console.error('Error uploading files:', error);
-//         throw new Error(`Failed to upload files: ${error.message}`);
-//     }
-// };
-const S3_BUCKET_PATH = process.env.S3_BUCKET_PATH;  // e.g., s3://mediashippers-filestash
 
 // Make sure this environment variable is defined before proceeding
 if (!S3_BUCKET_PATH) {
     throw new Error('S3_BUCKET_PATH environment variable is not set.');
 }
-
-// export const uploadFileToS3 = async (orgName, projectName, files) => {
-//     const uploadedFiles = [];
-
-//     for (const file of files) {
-//         // Ensure file is valid and check its type
-//         if (!file || !file.originalname || !file.buffer || !file.mimetype) {
-//             throw new Error('Invalid file data encountered.');
-//         }
-
-//         let filePath;
-
-//         // Determine the file path based on file type
-//         if (file.type === 'projectPoster' || file.type === 'projectBanner') {
-//             // For posters and banners, use the "film stills" folder
-//             filePath = `${orgName}/${projectName}/film stills/${file.originalname}`;
-//         } else if (file.type === 'projectTrailer') {
-//             // For trailers, use the "trailers" folder
-//             filePath = `${orgName}/${projectName}/trailer/${file.originalname}`;
-//         } else {
-//             throw new Error(`Unknown file type: ${file.type}`);
-//         }
-
-//         // Construct the full S3 path by combining the bucket path and file path
-//         const fullS3Path = `${S3_BUCKET_PATH}/${filePath}`;
-
-//         // Extract the bucket name from the full S3 path
-//         const bucketName = S3_BUCKET_PATH.split('/')[2];
-
-//         try {
-//             // Upload each file to S3
-//             const params = {
-//                 Bucket: bucketName,  // Bucket name
-//                 Key: filePath,       // File path inside the bucket
-//                 Body: file.buffer,   // File content
-//                 ContentType: file.mimetype  // MIME type for the file
-//             };
-
-//             const uploadResult = await s3.upload(params).promise();
-
-//             // Push the upload result (S3 file path) to the result array
-//             uploadedFiles.push(uploadResult);
-//         } catch (error) {
-//             console.error('Error uploading file:', error);
-//             throw new Error(`Error uploading file to S3: ${error.message}`);
-//         }
-//     }
-
-//     // Log the uploadedFiles array to debug the result
-//     console.log('Uploaded files:', uploadedFiles);
-
-//     // Return the full s3:// path in the response
-//     const fileUrls = uploadedFiles.map(result => {
-//         // Check if result.Key is defined
-//         if (result && result.Key) {
-//             return `${S3_BUCKET_PATH}/${result.Key}`;  // Return the full S3 path
-//         } else {
-//             console.error('Error: result.Key is undefined:', result);
-//             return 'Error: file upload failed';
-//         }
-//     });
-
-//     return fileUrls;
-// };
-
-
-// Express.js Endpoint to handle the incoming file uploads
-// app.post('/api/files/upload-file', upload.fields([
-//     { name: 'projectPoster', maxCount: 1 },
-//     { name: 'banner', maxCount: 1 },
-//     { name: 'trailer', maxCount: 1 }
-// ]), async (req, res) => {
-//     try {
-//         // Extract files from request body
-//         const { projectPoster, banner, trailer } = req.files;
-
-//         // Log the uploaded files
-//         console.log('Uploaded Files:', { projectPoster, banner, trailer });
-
-//         // If any file is missing, return an error
-//         if (!projectPoster || !banner || !trailer) {
-//             return res.status(400).send({ message: 'Missing required files' });
-//         }
-
-//         // Construct file details
-//         const files = [
-//             { originalname: projectPoster[0].originalname, buffer: projectPoster[0].buffer, mimetype: projectPoster[0].mimetype },
-//             { originalname: banner[0].originalname, buffer: banner[0].buffer, mimetype: banner[0].mimetype },
-//             { originalname: trailer[0].originalname, buffer: trailer[0].buffer, mimetype: trailer[0].mimetype }
-//         ];
-
-//         // Call uploadFile function to upload all files to S3
-//         const uploadResults = await uploadFile(req.body.orgName, req.body.projectName, files);
-
-//         // Send success response with uploaded URLs (from S3 response)
-//         res.status(200).send({
-//             projectPosterUrl: uploadResults[0].Location,
-//             bannerUrl: uploadResults[1].Location,
-//             trailerUrl: uploadResults[2].Location
-//         });
-//     } catch (error) {
-//         console.error('Error during file upload:', error);
-//         res.status(500).send({ message: 'Failed to upload files', error: error.message });
-//     }
-// });
 
 
 export const uploadFileToS3 = async (orgName, projectName, files) => {
@@ -223,36 +89,27 @@ export const uploadFileToS3 = async (orgName, projectName, files) => {
 
     if (file.type === 'projectPoster' || file.type === 'projectBanner') {
       filePath = `${orgName}/${projectName}/film stills/${file.originalname}`;
-
     } else if (file.type === 'projectTrailer') {
       filePath = `${orgName}/${projectName}/trailer/${file.originalname}`;
-
     } else if (file.type === 'dubbedTrailer') {
       const language = file.language || 'unknown';
       filePath = `${orgName}/${projectName}/trailer/${language}/${file.originalname}`;
-
     } else if (file.type === 'dubbedSubtitle') {
       const language = file.language || 'unknown';
       filePath = `${orgName}/${projectName}/srt files/${language}/${file.originalname}`;
-
     } else if (file.type === 'srtFile') {
-       delete file.language; 
       filePath = `${orgName}/${projectName}/srt files/${file.originalname}`;
-
     } else if (file.type === 'infoDocFile') {
       filePath = `${orgName}/${projectName}/srt files/${file.originalname}`;
-
     } else {
       throw new Error(`Unknown file type: ${file.type}`);
     }
 
-    const bucketName = S3_BUCKET_PATH.split('/')[2];
-
     const params = {
-      Bucket: bucketName,
+      Bucket: BUCKET_NAME, // ✅ Use correct bucket name
       Key: filePath,
       Body: file.buffer,
-      ContentType: file.mimetype
+      ContentType: file.mimetype,
     };
 
     try {
@@ -265,8 +122,10 @@ export const uploadFileToS3 = async (orgName, projectName, files) => {
     }
   }
 
-  return uploadedFiles.map(result => `${S3_BUCKET_PATH}/${result.Key}`);
+  // ✅ Return S3 URL
+  return uploadedFiles.map(result => `https://${BUCKET_NAME}.s3.amazonaws.com/${result.Key}`);
 };
+
 
 
 
@@ -514,71 +373,6 @@ export const getSubfoldersForProject = async (orgName, projectName) => {
         throw new Error('Failed to fetch subfolders for project');
     }
 };
-
-
-
-//old code 22-4-25
-// export const transferFilesBetweenBuckets = async (
-//     sourceUrl,
-//     orgName,
-//     projectFolder,
-//     fileName,
-//     accessKeyId,
-//     secretAccessKey,
-//     fileType
-//   ) => {
-//     return new Promise((resolve, reject) => {
-//       // Debugging log to see what fileType is being passed
-//       console.log("File type received:", fileType);
-  
-//       let destinationUrl = "";
-  
-//       // Determine destination folder based on file type
-//       if (fileType === "poster" || fileType === "banner") {
-//         destinationUrl = `s3://mediashippers-filestash/${orgName}/${projectFolder}/film stills/${fileName}`;
-//       } else if (fileType === "trailer") {
-//         destinationUrl = `s3://mediashippers-filestash/${orgName}/${projectFolder}/trailer/${fileName}`;
-//       } else if (fileType === "movie") {
-//         destinationUrl = `s3://mediashippers-filestash/${orgName}/${projectFolder}/master/${fileName}`;
-//       } else {
-//         // Reject if fileType is invalid
-//         return reject({ error: "Invalid file type" });
-//       }
-  
-//       // Set up the environment variables to include AWS credentials
-//       const envVars = {
-//         ...process.env,
-//         AWS_ACCESS_KEY_ID: accessKeyId,
-//         AWS_SECRET_ACCESS_KEY: secretAccessKey,
-//       };
-  
-//       // Define the AWS CLI command to transfer the file
-//       const s3Command = spawn("aws", ["s3", "cp", sourceUrl, destinationUrl], { env: envVars });
-  
-//       let output = "";
-//       let errorOutput = "";
-  
-//       // Collect the command's output
-//       s3Command.stdout.on("data", (data) => {
-//         output += data.toString();
-//       });
-  
-//       // Collect the command's error output
-//       s3Command.stderr.on("data", (data) => {
-//         errorOutput += data.toString();
-//       });
-  
-//       // Handle process close event
-//       s3Command.on("close", (code) => {
-//         if (code === 0) {
-//           resolve({ message: "File transferred successfully", output });
-//         } else {
-//           reject({ error: `AWS CLI process exited with code ${code}`, errorOutput });
-//         }
-//       });
-//     });
-//   };
-  
 
 
 export const transferFilesBetweenBuckets = async (

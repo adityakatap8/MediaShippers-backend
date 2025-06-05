@@ -1,31 +1,3 @@
-// import express from 'express';
-// import { createFolderHandler, listFolderContentsHandler, deleteItemHandler, getFoldersByOrgHandler, getAllProjectFolders, getSubfoldersController, createFolderController, uploadFileController } from '../controller/folderController.js';
-// import multer from 'multer';
-// const router = express.Router();
-// const upload = multer();
-
-// // Existing routes
-// router.post('/create-folder', createFolderHandler);
-// router.get('/list-folder', listFolderContentsHandler);
-// router.post('/delete-item', deleteItemHandler);
-
-// // New route to fetch folders by orgName
-// router.get('/folders-by-org', getFoldersByOrgHandler);
-
-// router.get('/get-project-folders/:orgName', getAllProjectFolders);
-
-// router.get('/subfolders/:orgName/:projectName', getSubfoldersController);
-
-
-
-// // Route to create a folder in S3
-// router.post('/create-folder', createFolderController);
-
-// // Route to upload a file to S3
-// router.post('/upload-file', uploadFileController);
-
-// export default router;
-
 
 
 import express from 'express';
@@ -48,6 +20,8 @@ import multer from 'multer';
 import AWS from 'aws-sdk'
 const router = express.Router();
 const upload = multer();
+import dotenv from 'dotenv';
+dotenv.config();
 
 // Existing routes
 router.get('/list-folder', listFolderContentsHandler);
@@ -70,9 +44,9 @@ router.post('/s3-list', getS3ObjByOrgHandler);
 
 // AWS S3 Configuration
 const s3 = new AWS.S3({
-  accessKeyId: "AKIATKPD3X56KBBSX2K2",  // Use environment variables for security in production
-  secretAccessKey: "1w3/mMbun6k4cGybvUWpKySNcXjOAjUj/J+gZb6A", // Avoid hardcoding secrets in production
-  region: "eu-north-1", // Example: "us-east-1"
+  accessKeyId: process.env.AWS_ACCESS_KEY_ID,       
+  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY, 
+  region: process.env.AWS_REGION,                     
   signatureVersion: 'v4',
 });
 
