@@ -150,6 +150,10 @@ export const addMessageAndUpdateStatus = async (req, res) => {
 
     const savedMessage = await newMessage.save();
 
+    // Add the message reference to the deal history array
+    deal.history.push(savedMessage._id);
+    await deal.save();
+
     res.status(201).json({
       message: 'Message added successfully',
       savedMessage
@@ -161,90 +165,98 @@ export const addMessageAndUpdateStatus = async (req, res) => {
 };
 
 export const getDealsWithCounts = async (req, res) => {
-  const { id } = req.params; // User ID (receiverId)
+  const { id } = req.params;
 
   try {
-    // Fetch all deals where the user is either the sender or the assigned receiver
+    const userId = new mongoose.Types.ObjectId(id);
+    console.log('Fetching deals for user ID:', userId);
+
     const deals = await Deal.aggregate([
       {
         $match: {
-          $or: [{ senderId: new mongoose.Types.ObjectId(id) }, { assignedTo: new mongoose.Types.ObjectId(id) }]
+          $or: [{ senderId: userId }, { assignedTo: userId }],
         }
       },
+      // Lookup child deals
       {
         $lookup: {
-          from: 'messages', // Join with the Message collection
-          let: { dealId: '$_id' }, // Pass the deal ID to the lookup
+          from: 'deals',
+          localField: '_id',
+          foreignField: 'parentDealId',
+          as: 'childDeals'
+        }
+      },
+      // Lookup unread messages for parent deals
+      {
+        $lookup: {
+          from: 'messages',
+          let: { dealId: '$_id' },
           pipeline: [
             {
               $match: {
                 $expr: {
                   $and: [
-                    { $eq: ['$dealId', '$$dealId'] }, // Match messages for the current deal
-                    { $eq: ['$receiverId', new mongoose.Types.ObjectId(id)] }, // Match messages where the user is the receiver
-                    { $eq: ['$read', false] } // Match unread messages
+                    { $eq: ['$dealId', '$$dealId'] },
+                    { $eq: ['$receiverId', userId] },
+                    { $eq: ['$read', false] }
                   ]
                 }
               }
             }
           ],
-          as: 'unreadMessages' // Store the result in the unreadMessages field
+          as: 'unreadMessages'
         }
       },
+      // Lookup project info
       {
         $lookup: {
-          from: 'projectinfos', // The name of the projectInfo collection
-          let: { movieIds: '$movies.movieId' }, // Pass movieId array to the lookup
+          from: 'projectinfos',
+          let: { movieIds: '$movies.movieId' },
           pipeline: [
             {
               $match: {
-                $expr: { $in: ['$_id', { $map: { input: '$$movieIds', as: 'id', in: { $toObjectId: '$$id' } } }] } // Match _id in projectInfo with movieId
+                $expr: {
+                  $in: [
+                    '$_id',
+                    {
+                      $map: {
+                        input: '$$movieIds',
+                        as: 'id',
+                        in: { $toObjectId: '$$id' }
+                      }
+                    }
+                  ]
+                }
               }
             }
           ],
-          as: 'movieDetails' // Join projectInfo data into movieDetails
+          as: 'movieDetails'
         }
       },
       {
         $addFields: {
-          unreadMessageCount: { $size: '$unreadMessages' } // Count the number of unread messages
+          unreadMessageCount: { $size: '$unreadMessages' }
         }
       },
       {
         $project: {
-          unreadMessages: 0 // Exclude the unreadMessages array from the final result
+          unreadMessages: 0
         }
       }
     ]);
 
-    // Count total deals
+    // Stats calculation
     const total = deals.length;
-
-    // Count pending deals
     const pending = deals.filter(deal => deal.status === 'pending').length;
-
-    // Count closed deals
     const closed = deals.filter(deal => deal.status === 'closed').length;
-
     const active = deals.filter(
-      deal =>
-        deal.status !== 'closed' &&
-        !deal.status.startsWith('rejected_')
+      deal => deal.status !== 'closed' && !deal.status.startsWith('rejected_')
     ).length;
-
-    const cancelled = deals.filter(
-      deal =>
-        deal.status === 'rejected_by_shipper' ||
-        deal.status === 'rejected_by_seller' ||
-        deal.status === 'rejected_by_buyer'
+    const cancelled = deals.filter(deal =>
+      ['rejected_by_shipper', 'rejected_by_seller', 'rejected_by_buyer'].includes(deal.status)
     ).length;
-
-    const shared = deals.filter(
-      deal => deal.senderId.toString() === id
-    ).length;
-    const received = deals.filter(
-      deal => deal.assignedTo.toString() === id
-    ).length;
+    const shared = deals.filter(deal => deal.senderId.toString() === id).length;
+    const received = deals.filter(deal => deal.assignedTo?.toString() === id).length;
 
     res.status(200).json({
       message: 'Deals retrieved successfully',
@@ -257,13 +269,16 @@ export const getDealsWithCounts = async (req, res) => {
         shared,
         received
       },
-      deals // Include unreadMessageCount for each deal
+      deals
     });
+
   } catch (error) {
     console.error('Error fetching deals and counts:', error);
     res.status(500).json({ error: 'Failed to fetch deals and counts' });
   }
 };
+
+
 
 export const getDealById = async (req, res) => {
   const { dealId } = req.params;
@@ -410,44 +425,22 @@ export const markMessagesAsRead = async (req, res) => {
 
 
 export const getMessageHistory = async (req, res) => {
-  const { dealId } = req.params; // Extract dealId from request parameters
-  const { loggedInUserId, loggedInUserRole, selectedUserId } = req.query; // Extract logged-in user ID, role, and selected user ID from query parameters
+  const { dealId } = req.params;
+  const { loggedInUserId, loggedInUserRole, selectedUserId } = req.query;
 
   try {
-    // Validate input
     if (!dealId || !mongoose.Types.ObjectId.isValid(dealId)) {
       return res.status(400).json({ message: 'Invalid or missing dealId' });
     }
-
     if (!loggedInUserId || !loggedInUserRole) {
       return res.status(400).json({ message: 'Logged-in user ID and role are required' });
     }
 
-    // Find all related deals using parentDealId
-    const relatedDeals = await Deal.find({ $or: [{ _id: dealId }, { parentDealId: dealId }] }).select('_id');
-    const relatedDealIds = relatedDeals.map(deal => deal._id);
-
-    // Build the query based on the logged-in user's role
+    // Use dealId directly (no parent/child deals)
     let query = {
-      dealId: { $in: relatedDealIds }, // Fetch messages for all related deals
-      visibleTo: loggedInUserRole, // Ensure messages are visible to the logged-in user's role
+      dealId: dealId
     };
 
-    // If admin selects a specific user, filter messages by senderId and receiverId
-    if (loggedInUserRole === 'Admin' && selectedUserId) {
-      query.$or = [
-        { senderId: loggedInUserId, receiverId: selectedUserId }, // Messages sent by admin to the selected user
-        { senderId: selectedUserId, receiverId: loggedInUserId }  // Messages sent by the selected user to admin
-      ];
-    } else {
-      // Default behavior: Admin sees all messages visible to them
-      query.$or = [
-        { senderId: loggedInUserId }, // Messages sent by admin
-        { receiverId: loggedInUserId } // Messages received by admin
-      ];
-    }
-
-    // Find all messages for the related deals, filtered by query and sorted by timestamp
     const messages = await Message.find(query).sort({ timestamp: 1 });
 
     if (!messages || messages.length === 0) {
@@ -463,6 +456,7 @@ export const getMessageHistory = async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch message history' });
   }
 };
+
 
 
 export const splitDealToSellers = async (req, res) => {
