@@ -45,7 +45,8 @@ const corsOptions = {
             'https://www.mediashippers.com',
             'https://13.61.14.53:3000',
             'https://172.31.27.22:3000',
-            'https://shipmedia-volume-1.vercel.app'
+            'https://shipmedia-volume-1.vercel.app',
+            'https://www.testmediashippers.com'
         ];
         if (!origin || allowedOrigins.includes(origin)) {
             callback(null, true);
