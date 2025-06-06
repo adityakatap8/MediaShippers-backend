@@ -1,7 +1,8 @@
 // api/index.js
-import app from '../app.js';
 import { createServer } from 'http';
+import app from '../app.js';
 
-export default async function handler(req, res) {
-    return app(req, res);
+// This is required to work with Vercel’s serverless functions
+export default function handler(req, res) {
+  return app(req, res);
 }
