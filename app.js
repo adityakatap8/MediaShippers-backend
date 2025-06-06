@@ -38,9 +38,26 @@ const __dirname = path.dirname(__filename);
 const app = express();
 
 const corsOptions = {
-  origin: true,
-  credentials: true,
+    origin: (origin, callback) => {
+        const allowedOrigins = [
+            'http://localhost:5173',
+            'http://localhost:3000',
+            'https://www.mediashippers.com',
+            'https://13.61.14.53:3000',
+            'https://172.31.27.22:3000',
+            'https://shipmedia-volume-1-nk9a24ghg-udayghare-entertainmens-projects.vercel.app'
+        ];
+        if (!origin || allowedOrigins.includes(origin)) {
+            callback(null, true);
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'OPTIONS', 'PUT', 'PATCH', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
 };
+
 app.use(cors(corsOptions));
 app.use(compression());
 app.use(express.json());
@@ -48,18 +65,18 @@ app.use(cookieParser());
 
 // Logger
 if (process.env.NODE_ENV === 'development') {
-  app.use(morgan('dev'));
+    app.use(morgan('dev'));
 } else {
-  const logDir = path.resolve(__dirname, 'logs');
-  if (!fs.existsSync(logDir)) fs.mkdirSync(logDir);
-  const accessLogStream = fs.createWriteStream(path.join(logDir, 'access.log'), { flags: 'a' });
-  app.use(morgan('combined', { stream: accessLogStream }));
+    const logDir = path.resolve(__dirname, 'logs');
+    if (!fs.existsSync(logDir)) fs.mkdirSync(logDir);
+    const accessLogStream = fs.createWriteStream(path.join(logDir, 'access.log'), { flags: 'a' });
+    app.use(morgan('combined', { stream: accessLogStream }));
 }
 
 // Mongo connection
 mongoose.connect(process.env.mongo_url)
-  .then(() => console.log('✅ Mongo connected'))
-  .catch(err => console.error('❌ Mongo error:', err));
+    .then(() => console.log('✅ Mongo connected'))
+    .catch(err => console.error('❌ Mongo error:', err));
 
 // ---------------- Public Routes ----------------
 app.use('/api/auth', authRoutes);
