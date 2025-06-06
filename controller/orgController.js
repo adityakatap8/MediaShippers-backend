@@ -1,4 +1,4 @@
-import { Organization } from '../models/orgModel.js';
+import { Organization } from '../models/OrgModel.js';
 import { User } from '../models/User.js';
 import bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
