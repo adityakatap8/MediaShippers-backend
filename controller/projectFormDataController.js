@@ -136,6 +136,31 @@ getProjectFormData: async (req, res) => {
     }
   },
 
+deleteProject: async (req, res) => {
+  const { id: projectId } = req.params;
+
+  try {
+    if (!mongoose.Types.ObjectId.isValid(projectId)) {
+      return res.status(400).json({ error: 'Invalid project ID format' });
+    }
+
+    const deleteResult = await ProjectInfo.deleteOne({ _id: projectId });
+
+    if (deleteResult.deletedCount === 0) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
+    res.json({ message: 'Project deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting project:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+},
+
+
+
+
+
   // Handle file upload
   uploadProjectFile: upload.single('projectFile'),
 
