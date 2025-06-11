@@ -165,7 +165,7 @@ export const addMessageAndUpdateStatus = async (req, res) => {
 };
 
 export const getDealsWithCounts = async (req, res) => {
-  const { id } = req.params;
+  const { id } = req.params; // User ID (receiverId)
 
   try {
     const userId = new mongoose.Types.ObjectId(id);
@@ -175,7 +175,7 @@ export const getDealsWithCounts = async (req, res) => {
       {
         $match: {
           $or: [{ senderId: userId }, { assignedTo: userId }],
-        }
+        },
       },
       // Lookup child deals
       {
@@ -183,8 +183,8 @@ export const getDealsWithCounts = async (req, res) => {
           from: 'deals',
           localField: '_id',
           foreignField: 'parentDealId',
-          as: 'childDeals'
-        }
+          as: 'childDeals',
+        },
       },
       // Lookup unread messages for parent deals
       {
@@ -198,65 +198,94 @@ export const getDealsWithCounts = async (req, res) => {
                   $and: [
                     { $eq: ['$dealId', '$$dealId'] },
                     { $eq: ['$receiverId', userId] },
-                    { $eq: ['$read', false] }
-                  ]
-                }
-              }
-            }
+                    { $eq: ['$read', false] },
+                  ],
+                },
+              },
+            },
           ],
-          as: 'unreadMessages'
-        }
+          as: 'unreadMessages',
+        },
       },
-      // Lookup project info
+      // Lookup unread messages for child deals
       {
         $lookup: {
-          from: 'projectinfos',
-          let: { movieIds: '$movies.movieId' },
+          from: 'messages',
+          let: { childDealIds: '$childDeals._id' },
           pipeline: [
             {
               $match: {
                 $expr: {
-                  $in: [
-                    '$_id',
-                    {
-                      $map: {
-                        input: '$$movieIds',
-                        as: 'id',
-                        in: { $toObjectId: '$$id' }
-                      }
-                    }
-                  ]
-                }
-              }
-            }
+                  $and: [
+                    { $in: ['$dealId', '$$childDealIds'] },
+                    { $eq: ['$receiverId', userId] },
+                    { $eq: ['$read', false] },
+                  ],
+                },
+              },
+            },
           ],
-          as: 'movieDetails'
-        }
+          as: 'childUnreadMessages',
+        },
       },
+      // Add unreadMessageCount to childDeals
       {
         $addFields: {
-          unreadMessageCount: { $size: '$unreadMessages' }
-        }
+          childDeals: {
+            $map: {
+              input: '$childDeals',
+              as: 'childDeal',
+              in: {
+                $mergeObjects: [
+                  '$$childDeal',
+                  {
+                    unreadMessageCount: {
+                      $size: {
+                        $filter: {
+                          input: '$childUnreadMessages',
+                          as: 'msg',
+                          cond: { $eq: ['$$msg.dealId', '$$childDeal._id'] },
+                        },
+                      },
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        },
+      },
+      // Add unreadMessageCount for parent deals
+      {
+        $addFields: {
+          unreadMessageCount: { $size: '$unreadMessages' },
+        },
       },
       {
         $project: {
-          unreadMessages: 0
-        }
-      }
+          unreadMessages: 0,
+          childUnreadMessages: 0, // Exclude intermediate fields
+        },
+      },
     ]);
 
     // Stats calculation
     const total = deals.length;
-    const pending = deals.filter(deal => deal.status === 'pending').length;
-    const closed = deals.filter(deal => deal.status === 'closed').length;
+    const pending = deals.filter((deal) => deal.status === 'pending').length;
+    const closed = deals.filter((deal) => deal.status === 'closed').length;
     const active = deals.filter(
-      deal => deal.status !== 'closed' && !deal.status.startsWith('rejected_')
+      (deal) =>
+        deal.status !== 'closed' && !deal.status.startsWith('rejected_')
     ).length;
-    const cancelled = deals.filter(deal =>
-      ['rejected_by_shipper', 'rejected_by_seller', 'rejected_by_buyer'].includes(deal.status)
+    const cancelled = deals.filter((deal) =>
+      ['rejected_by_shipper', 'rejected_by_seller', 'rejected_by_buyer'].includes(
+        deal.status
+      )
     ).length;
-    const shared = deals.filter(deal => deal.senderId.toString() === id).length;
-    const received = deals.filter(deal => deal.assignedTo?.toString() === id).length;
+    const shared = deals.filter((deal) => deal.senderId.toString() === id).length;
+    const received = deals.filter(
+      (deal) => deal.assignedTo?.toString() === id
+    ).length;
 
     res.status(200).json({
       message: 'Deals retrieved successfully',
@@ -267,11 +296,10 @@ export const getDealsWithCounts = async (req, res) => {
         active,
         cancelled,
         shared,
-        received
+        received,
       },
-      deals
+      deals, // Include unreadMessageCount for each deal and child deal
     });
-
   } catch (error) {
     console.error('Error fetching deals and counts:', error);
     res.status(500).json({ error: 'Failed to fetch deals and counts' });
