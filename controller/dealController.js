@@ -177,6 +177,36 @@ export const getDealsWithCounts = async (req, res) => {
           $or: [{ senderId: userId }, { assignedTo: userId }],
         },
       },
+      // Lookup user details for senderId
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'senderId',
+          foreignField: '_id',
+          as: 'senderDetails',
+        },
+      },
+      // Extract senderDetails as an object
+      {
+        $addFields: {
+          senderDetails: { $arrayElemAt: ['$senderDetails', 0] },
+        },
+      },
+      // Lookup user details for assignedTo
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'assignedTo',
+          foreignField: '_id',
+          as: 'assignedToDetails',
+        },
+      },
+      // Extract assignedToDetails as an object
+      {
+        $addFields: {
+          assignedToDetails: { $arrayElemAt: ['$assignedToDetails', 0] },
+        },
+      },
       // Lookup child deals
       {
         $lookup: {
@@ -184,6 +214,45 @@ export const getDealsWithCounts = async (req, res) => {
           localField: '_id',
           foreignField: 'parentDealId',
           as: 'childDeals',
+        },
+      },
+      // Lookup senderDetails for childDeals
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'childDeals.senderId',
+          foreignField: '_id',
+          as: 'childSenderDetails',
+        },
+      },
+      // Add senderDetails to childDeals
+      {
+        $addFields: {
+          childDeals: {
+            $map: {
+              input: '$childDeals',
+              as: 'childDeal',
+              in: {
+                $mergeObjects: [
+                  '$$childDeal',
+                  {
+                    senderDetails: {
+                      $arrayElemAt: [
+                        {
+                          $filter: {
+                            input: '$childSenderDetails',
+                            as: 'user',
+                            cond: { $eq: ['$$user._id', '$$childDeal.senderId'] },
+                          },
+                        },
+                        0,
+                      ],
+                    },
+                  },
+                ],
+              },
+            },
+          },
         },
       },
       // Lookup unread messages for parent deals
@@ -489,7 +558,7 @@ export const getMessageHistory = async (req, res) => {
 
 export const splitDealToSellers = async (req, res) => {
   try {
-    const { dealId } = req.body;
+    const { dealId, userId } = req.body;
 
     const existingDeal = await Deal.findById(dealId);
     if (!existingDeal) return res.status(404).json({ message: 'Deal not found' });
@@ -519,7 +588,7 @@ export const splitDealToSellers = async (req, res) => {
     // Create a deal per seller
     for (const [sellerId, movies] of Object.entries(sellerMap)) {
       const newDeal = new Deal({
-        senderId: existingDeal.senderId,
+        senderId: userId,
         movies,
         rights: existingDeal.rights,
         territory: existingDeal.territory,
