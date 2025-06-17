@@ -632,10 +632,12 @@ export const sellerActionOnMovies = async (req, res) => {
     if (!Array.isArray(movies) || movies.length === 0) {
       return res.status(400).json({ message: 'No movie actions provided' });
     }
+    console.log('Deal ID: 1', dealId);
 
+    
     const deal = await Deal.findById(dealId);
     if (!deal) return res.status(404).json({ message: 'Deal not found' });
-
+    console.log('Deal found:', deal);
     let updated = false;
 
     movies.forEach(({ movieId, status, remarks }) => {
@@ -654,7 +656,7 @@ export const sellerActionOnMovies = async (req, res) => {
 
     if (!updated) return res.status(400).json({ message: 'No valid movie updates found' });
 
-    deal.status = 'deal_from_seller';
+    deal.status = 'sent_to_shipper';
 
     deal.updatedAt = new Date();
     await deal.save();
