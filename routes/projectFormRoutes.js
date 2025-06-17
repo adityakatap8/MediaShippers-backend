@@ -20,7 +20,8 @@ projectFormRouter.get('/', projectFormController.getAllProjects);
 projectFormRouter.get('/all-details', projectFormDataController.getAllProjectsWithFormData);
 projectFormRouter.get('/data/:id', projectFormDataController.getProjectFormData);
 
-projectFormRouter.put('/update/:id/:section', projectFormDataController.updateProjectFormData);
+projectFormRouter.patch('/update/:id', projectFormDataController.updateMultipleSections);
+
 projectFormRouter.delete('/delete/:id', projectFormDataController.deleteProject);
 
 projectFormRouter.get('/specifications/:id', projectFormDataController.getSpecificationsInfo);

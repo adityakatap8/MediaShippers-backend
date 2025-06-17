@@ -91,50 +91,62 @@ getProjectFormData: async (req, res) => {
   }
 }
 ,
-
-
   // Update project form data
-  updateProjectFormData: async (req, res) => {
-    const { id: projectId, section } = req.params;
-    const updateData = req.body;
+updateMultipleSections: async (req, res) => {
+  const { id: projectId } = req.params;
+  const updateData = req.body;
 
-    try {
-      if (!mongoose.Types.ObjectId.isValid(projectId)) {
-        return res.status(400).json({ error: 'Invalid project ID format' });
-      }
-
-      if (!section || typeof section !== 'string') {
-        return res.status(400).json({ error: 'Invalid section identifier' });
-      }
-
-      const sectionMappings = {
-        projectInfo: 'projectInfo',
-        
-        creditsInfo: 'creditsInfo',
-        specificationsInfo: 'specificationsInfo',
-        screeningsInfo: 'screeningsInfo',
-      };
-
-      if (!sectionMappings[section]) {
-        return res.status(400).json({ error: 'Invalid section name' });
-      }
-
-      const updateField = sectionMappings[section];
-      const updateResult = await ProjectForm.updateOne(
-        { projectInfo: projectId },
-        { $set: { [updateField]: updateData } }
-      );
-
-      if (updateResult.matchedCount === 0) {
-        return res.status(404).json({ error: 'Project not found' });
-      }
-
-      res.json({ message: `${section} updated successfully` });
-    } catch (error) {
-      console.error('Error updating project data:', error.message);
-      res.status(500).json({ error: 'Internal server error' });
+  try {
+    if (!mongoose.Types.ObjectId.isValid(projectId)) {
+      return res.status(400).json({ error: 'Invalid project ID' });
     }
-  },
+
+    const project = await ProjectInfo.findById(projectId);
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
+    const sectionsMap = {
+      projectInfo: { model: ProjectInfo, id: project._id },
+      creditsInfo: { model: CreditsInfo, id: project.creditsInfoId },
+      rightsInfo: { model: RightsInfoGroup, id: project.rightsInfoId },
+      specificationsInfo: { model: SpecificationsInfo, id: project.specificationsInfoId },
+    };
+
+    const updateResults = {};
+
+    for (const section of Object.keys(sectionsMap)) {
+      if (updateData[section]) {
+        const { model, id } = sectionsMap[section];
+        if (!id) continue;
+
+        const updatedDoc = await model.findByIdAndUpdate(id, updateData[section], { new: true }).exec();
+        if (updatedDoc) {
+          updateResults[section] = {
+            id: updatedDoc._id,
+            updatedData: updatedDoc,
+          };
+        }
+      }
+    }
+
+    if (Object.keys(updateResults).length === 0) {
+      return res.status(400).json({ message: 'No valid sections to update or invalid IDs.' });
+    }
+
+    res.json({
+      message: 'Project and related sections updated successfully',
+      updates: updateResults,
+    });
+
+  } catch (error) {
+    console.error('Error updating project and sections:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+,
+
 
 deleteProject: async (req, res) => {
   const { id: projectId } = req.params;
