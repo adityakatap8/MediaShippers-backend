@@ -184,7 +184,7 @@ export const uploadFileController = async (req, res) => {
     try {
         const s3 = new AWS.S3();
         const params = {
-            Bucket: 'mediashippers-filestash', // Your S3 bucket name
+            Bucket: 'testmediashippers', // Your S3 bucket name
             Key: `${uploadPath}${req.file.originalname}`, // Full path in the S3 bucket
             Body: req.file.buffer,  // File content
             ContentType: req.file.mimetype,
@@ -220,7 +220,7 @@ export const uploadFileController = async (req, res) => {
 //     }
 
 //     // Construct S3 file URLs for testing
-//     const s3BaseURL = 'https://s3.eu-north-1.amazonaws.com/mediashippers-filestash/';
+//     const s3BaseURL = 'https://s3.eu-north-1.amazonaws.com/testmediashippers/';
 //     const fileNames = [
 //       "APlaceAmongTheDead Fawesome_Portrait_2100x2700 copy.jpg",
 //     ];

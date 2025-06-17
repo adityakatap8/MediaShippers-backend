@@ -416,7 +416,7 @@ export const transferFilesBetweenBuckets = async (
     console.log("📂 Mapped folder:", folder);
 
     // Step 2: Build destination S3 URI
-    const destinationUrl = `s3://mediashippers-filestash/${orgName}/${projectFolder}/${folder}/${fileName}`;
+    const destinationUrl = `s3://testmediashippers/${orgName}/${projectFolder}/${folder}/${fileName}`;
     console.log("📥 Destination S3 URI:", destinationUrl);
 
     // Step 3: Path to AWS CLI (Windows)

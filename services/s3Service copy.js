@@ -97,7 +97,7 @@ export const createSubfoldersController = async (req, res) => {
 //         throw new Error(`Failed to upload files: ${error.message}`);
 //     }
 // };
-const S3_BUCKET_PATH = process.env.S3_BUCKET_PATH;  // e.g., s3://mediashippers-filestash
+const S3_BUCKET_PATH = process.env.S3_BUCKET_PATH;  // e.g., s3://testmediashippers
 
 // Make sure this environment variable is defined before proceeding
 if (!S3_BUCKET_PATH) {
@@ -432,11 +432,11 @@ export const transferFilesBetweenBuckets = async (
   
       // Determine destination folder based on file type
       if (fileType === "poster" || fileType === "banner") {
-        destinationUrl = `s3://mediashippers-filestash/${orgName}/${projectFolder}/film stills/${fileName}`;
+        destinationUrl = `s3://testmediashippers/${orgName}/${projectFolder}/film stills/${fileName}`;
       } else if (fileType === "trailer") {
-        destinationUrl = `s3://mediashippers-filestash/${orgName}/${projectFolder}/trailer/${fileName}`;
+        destinationUrl = `s3://testmediashippers/${orgName}/${projectFolder}/trailer/${fileName}`;
       } else if (fileType === "movie") {
-        destinationUrl = `s3://mediashippers-filestash/${orgName}/${projectFolder}/master/${fileName}`;
+        destinationUrl = `s3://testmediashippers/${orgName}/${projectFolder}/master/${fileName}`;
       } else {
         // Reject if fileType is invalid
         return reject({ error: "Invalid file type" });

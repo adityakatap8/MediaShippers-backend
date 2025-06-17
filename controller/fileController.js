@@ -124,7 +124,7 @@ export const uploadFile = async (folderPath, file) => {
 //           return null;  // Return null if Key is missing
 //         }
 
-//         // Return the S3 path without prepending s3://mediashippers-filestash/ again
+//         // Return the S3 path without prepending s3://testmediashippers/ again
 //         return result.Key;
 //       }).filter(url => url !== null);  // Filter out null values (if any)
 
