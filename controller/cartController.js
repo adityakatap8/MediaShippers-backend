@@ -50,11 +50,26 @@ export const addToCart = async (req, res) => {
 };
 
 
-export const clearCart = async (req, res) => {
+export const deleteCartMovie = async (req, res) => {
+  const { userId, cartItemId } = req.params; // Extract userId and cartItemId from request parameters
+
+  if (!userId || !cartItemId) {
+    return res.status(400).json({ message: 'User ID and Cart Item ID are required' });
+  }
+
   try {
-    await Cart.deleteOne({ userId: req.user._id });
-    res.json({ message: 'Cart cleared' });
+    const result = await Cart.updateOne(
+      { userId }, // Match the cart by userId
+      { $pull: { movies: { movieId: cartItemId } } } // Remove the movie with the matching _id
+    );
+
+    if (result.modifiedCount === 0) {
+      return res.status(404).json({ message: 'Cart item not found' });
+    }
+
+    res.json({ message: 'Cart item removed successfully' });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to clear cart' });
+    console.error('Error clearing cart item:', err);
+    res.status(500).json({ error: 'Failed to clear cart item' });
   }
 };
