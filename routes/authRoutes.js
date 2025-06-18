@@ -71,15 +71,8 @@ async function authenticationToken(req, res, next) {
 authRoutes.post('/register', async (req, res) => {
   console.log('Received register request:', req.body);
   try {
-    const { name, orgName, email, password, role } = req.body;
+    const { name, orgName, email, password, phoneNumber, companySite, role } = req.body;
 
-    // Validate input
-    if (!name || !orgName || !email || !password || !role) {
-      return res.status(400).json({
-        success: false,
-        errorMessage: 'Missing required fields'
-      });
-    }
 
     // Hash password
     const hashedPassword = await hashPassword(password);
@@ -99,13 +92,14 @@ authRoutes.post('/register', async (req, res) => {
 
     // Create user with _id set to userId
     const user = new User({
-      _id: userId,  // Set _id directly
-      userId: userId,  // Set userId field
       name,
       orgName,
       email,
+      phoneNumber,
+      companySite,
       passwordHash: hashedPassword,
-      role
+      role,
+      isApproved: false
     });
 
     // Save the user
@@ -117,7 +111,6 @@ authRoutes.post('/register', async (req, res) => {
     res.json({
       success: true,
       message: 'User registered successfully',
-      userId: userId,
       token: token
     });
   } catch (error) {

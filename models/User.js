@@ -10,8 +10,7 @@ const UserSchema = new mongoose.Schema({
   },
   organizationId: {
     type: String,
-    ref: 'Organization',
-    required: true,
+    ref: 'Organization'
   },
   role: {
     type: String,
@@ -26,6 +25,10 @@ const UserSchema = new mongoose.Schema({
   },
   verificationToken: String,
   tokenExpiresAt: Date,
+  isApproved: {
+    type: Boolean,
+    default: false,
+  },
   createdAt: {
     type: Date,
     default: Date.now
@@ -34,6 +37,8 @@ const UserSchema = new mongoose.Schema({
     type: Date,
     default: Date.now
   },
+  companySite: String,
+  phoneNumber: Number
 });
 
 
