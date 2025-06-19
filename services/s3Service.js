@@ -421,12 +421,11 @@ export const transferFilesBetweenBuckets = async (
   fileType
 ) => {
   try {
-    console.log("🔄 Starting file transfer...");
-    console.log("📄 File type:", fileType);
-    console.log("📘 Source URL (should be HTTPS):", sourceUrl);
-    console.log("📁 Destination folder:", `${orgName}/${projectFolder}`);
-    console.log("📛 File name:", fileName);
-
+    console.log(":arrows_anticlockwise: Starting file transfer...");
+    console.log(":page_facing_up: File type:", fileType);
+    console.log(":blue_book: Source URL (should be HTTPS):", sourceUrl);
+    console.log(":file_folder: Destination folder:", `${orgName}/${projectFolder}`);
+    console.log(":name_badge: File name:", fileName);
     // Map file type to folder
     const folderMap = {
       poster: "film stills",
@@ -434,19 +433,16 @@ export const transferFilesBetweenBuckets = async (
       trailer: "trailer",
       movie: "master",
     };
-
     const folder = folderMap[fileType];
     if (!folder) {
       throw new Error(`Invalid file type: ${fileType}`);
     }
-
     // Build destination S3 key and URL
     const destinationKey = `${orgName}/${projectFolder}/${folder}/${fileName}`;
     const destinationUrl = `https://mediashippers-filestash.s3.amazonaws.com/${destinationKey}`;
-    console.log("📂 Mapped folder:", folder);
-    console.log("📥 Destination S3 URL:", destinationUrl);
-
-    // ✅ Normalize the source URL if it starts with s3://
+    console.log(":open_file_folder: Mapped folder:", folder);
+    console.log(":inbox_tray: Destination S3 URL:", destinationUrl);
+    // :white_tick: Normalize the source URL if it starts with s3://
     let normalizedSourceUrl = sourceUrl;
     if (sourceUrl.startsWith('s3://')) {
       const [, bucketAndKey] = sourceUrl.split('s3://');
@@ -454,21 +450,19 @@ export const transferFilesBetweenBuckets = async (
       const key = keyParts.join('/');
       normalizedSourceUrl = `https://${bucket}.s3.amazonaws.com/${encodeURIComponent(key)}`;
     }
-
-    console.log("🔗 Normalized Source URL:", normalizedSourceUrl);
-
+    // :white_tick: Fix any space accidentally added between bucket name and .s3.amazonaws.com
+    normalizedSourceUrl = normalizedSourceUrl.replace(/(https:\/\/[^\s\/]+)\s+(\.s3\.amazonaws\.com)/, '$1$2');
+    console.log(":link: Normalized Source URL:", normalizedSourceUrl);
     // Configure AWS SDK
     const s3 = new AWS.S3({
       accessKeyId,
       secretAccessKey,
       region: 'us-east-1',
     });
-
     // Step 1: Download the file from the source URL
     const response = await axios.get(normalizedSourceUrl, { responseType: 'arraybuffer' });
     const fileBuffer = Buffer.from(response.data);
-    console.log(`⬇️ File downloaded, size: ${fileBuffer.length} bytes`);
-
+    console.log(`:arrow_down: File downloaded, size: ${fileBuffer.length} bytes`);
     // Step 2: Upload the file to the destination bucket
     const uploadResult = await s3.upload({
       Bucket: BUCKET_NAME,
@@ -476,17 +470,14 @@ export const transferFilesBetweenBuckets = async (
       Body: fileBuffer,
       ContentType: response.headers['content-type'],
     }).promise();
-
-    console.log("✅ File uploaded successfully!");
-    console.log("🌐 Public URL:", uploadResult.Location);
-
+    console.log(":white_tick: File uploaded successfully!");
+    console.log(":globe_with_meridians: Public URL:", uploadResult.Location);
     return {
       message: "File transferred successfully",
       url: uploadResult.Location,
     };
-
   } catch (err) {
-    console.error("❌ Transfer error:", err.message);
+    console.error(":x: Transfer error:", err.message);
     return {
       error: err.message,
     };
