@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import ProjectFormViewerService from '../services/projectFormViewerService.js';
 import multer from 'multer';
 import jwt from 'jsonwebtoken';
+import { deleteFolder } from '../services/s3Service.js'
 
 // Mongoose models
 import ProjectForm from '../models/projectFormModels/ProjectForm.js';
@@ -9,7 +10,8 @@ import ProjectInfo from '../models/projectFormModels/FormModels/ProjectInfoSchem
 
 import CreditsInfo from '../models/projectFormModels/FormModels/CreditsInfoSchema.js';
 import SpecificationsInfo from '../models/projectFormModels/FormModels/SpecificationsInfo.js';
-import RightsInfoGroup from '../models/projectFormModels/FormModels/RightsInfoSchema.js'; // ✅ Correct
+import RightsInfoGroup from '../models/projectFormModels/FormModels/RightsInfoSchema.js';
+import SrtInfoFileSchema from '../models/projectFormModels/FormModels/SrtInfoFileSchema.js';
 
 
 
@@ -56,24 +58,26 @@ getProjectFormData: async (req, res) => {
 
     const objectId = new mongoose.Types.ObjectId(projectId);
 
-    // Correctly find the ProjectForm where projectInfo matches the _id
+    // Step 1: Get the project form using projectInfo reference
     const projectForm = await ProjectForm.findOne({ projectInfo: objectId });
 
     if (!projectForm) {
       return res.status(404).json({ error: 'Project form not found' });
     }
 
-    // Populate all related documents
-    const [
-      projectInfo,
-      creditsInfo,
-      specificationsInfo,
-      rightsInfo,
-    ] = await Promise.all([
-      ProjectInfo.findById(projectForm.projectInfo),
+    // Step 2: Fetch projectInfo first (we need it to get srtFilesId)
+    const projectInfo = await ProjectInfo.findById(projectForm.projectInfo);
+
+    if (!projectInfo) {
+      return res.status(404).json({ error: 'ProjectInfo not found' });
+    }
+
+    // Step 3: Use the srtFilesId from projectInfo to fetch SRT data
+    const [creditsInfo, specificationsInfo, rightsInfo, srtInfo] = await Promise.all([
       CreditsInfo.findById(projectForm.creditsInfo),
       SpecificationsInfo.findById(projectForm.specificationsInfo),
-      RightsInfoGroup.findById(projectForm.rightsInfo?.[0]), // In case rightsInfo is an array
+      RightsInfoGroup.findById(projectForm.rightsInfo?.[0]),
+      SrtInfoFileSchema.findById(projectInfo.srtFilesId), // ✅ correct reference
     ]);
 
     const responseData = {
@@ -82,6 +86,7 @@ getProjectFormData: async (req, res) => {
       creditsInfo,
       specificationsInfo,
       rightsInfo,
+      srtInfo, // ✅ rename back to srtInfo for clarity
     };
 
     res.json(responseData);
@@ -90,6 +95,8 @@ getProjectFormData: async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 }
+
+
 ,
   // Update project form data
 updateMultipleSections: async (req, res) => {
@@ -148,27 +155,61 @@ updateMultipleSections: async (req, res) => {
 ,
 
 
-deleteProject: async (req, res) => {
+// deleteProject: async (req, res) => {
+//   const { id: projectId } = req.params;
+
+//   try {
+//     if (!mongoose.Types.ObjectId.isValid(projectId)) {
+//       return res.status(400).json({ error: 'Invalid project ID format' });
+//     }
+
+//     const deleteResult = await ProjectInfo.deleteOne({ _id: projectId });
+
+//     if (deleteResult.deletedCount === 0) {
+//       return res.status(404).json({ error: 'Project not found' });
+//     }
+
+//     res.json({ message: 'Project deleted successfully' });
+//   } catch (error) {
+//     console.error('Error deleting project:', error.message);
+//     res.status(500).json({ error: 'Internal server error' });
+//   }
+// },
+
+
+deleteProject : async (req, res) => {
   const { id: projectId } = req.params;
+  const { orgName, projectName } = req.body; // 👈 Grab from body
 
   try {
     if (!mongoose.Types.ObjectId.isValid(projectId)) {
       return res.status(400).json({ error: 'Invalid project ID format' });
     }
 
+    // Delete project document from MongoDB
     const deleteResult = await ProjectInfo.deleteOne({ _id: projectId });
-
     if (deleteResult.deletedCount === 0) {
-      return res.status(404).json({ error: 'Project not found' });
+      return res.status(404).json({ error: 'Project not found for deletion' });
     }
 
-    res.json({ message: 'Project deleted successfully' });
+    // Log and delete S3 folder
+    const folderPath = `${orgName}/${projectName}/`;
+    console.log(`🗂️ S3 folder path to delete: ${folderPath}`);
+
+    try {
+      await deleteFolder(folderPath); // from your s3 service
+      console.log(`✅ S3 folder deleted: ${folderPath}`);
+    } catch (s3Error) {
+      console.error(`❌ Failed to delete S3 folder: ${s3Error.message}`);
+    }
+
+    return res.status(200).json({ message: 'Project and associated S3 folder deleted successfully.' });
+
   } catch (error) {
     console.error('Error deleting project:', error.message);
-    res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 },
-
 
 
 
