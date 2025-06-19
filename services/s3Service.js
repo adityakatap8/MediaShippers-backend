@@ -439,7 +439,7 @@ export const transferFilesBetweenBuckets = async (
     }
     // Build destination S3 key and URL
     const destinationKey = `${orgName}/${projectFolder}/${folder}/${fileName}`;
-    const destinationUrl = `https://mediashippers-filestash.s3.amazonaws.com/${destinationKey}`;
+    const destinationUrl = `https://testmediashippers.s3.amazonaws.com/${destinationKey}`;
     console.log(":open_file_folder: Mapped folder:", folder);
     console.log(":inbox_tray: Destination S3 URL:", destinationUrl);
     // :white_tick: Normalize the source URL if it starts with s3://
