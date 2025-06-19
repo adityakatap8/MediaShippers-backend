@@ -3,6 +3,13 @@
 import { transferFilesBetweenBuckets } from '../services/s3Service.js'; // Import the file transfer service
 
 // Controller to handle file transfer between S3 buckets
+// controllers/transferFileController.js
+
+import dotenv from 'dotenv';
+
+
+dotenv.config();
+
 export const transferFileController = async (req, res) => {
   const {
     posterFileUrl,
@@ -11,15 +18,18 @@ export const transferFileController = async (req, res) => {
     movieFileUrl,
     orgName,
     projectFolder,
-    accessKeyId,
-    secretAccessKey,
     dubbedFiles = [],
     srtFiles = [],
     infoDocs = [],
   } = req.body;
 
+  const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
+  const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
+
   if (!orgName || !projectFolder || !accessKeyId || !secretAccessKey) {
-    return res.status(400).json({ error: 'Organization name, project folder, and credentials are required.' });
+    return res.status(400).json({
+      error: 'Organization name, project folder, and AWS credentials are required.',
+    });
   }
 
   const errors = [];
@@ -38,7 +48,7 @@ export const transferFileController = async (req, res) => {
     for (let file of transferData) {
       if (file.fileUrl && typeof file.fileUrl === 'string') {
         try {
-          const fileName = file.fileUrl.split('/').pop();
+          const fileName = decodeURIComponent(file.fileUrl.split('/').pop());
           await transferFilesBetweenBuckets(
             file.fileUrl,
             orgName,
@@ -60,7 +70,7 @@ export const transferFileController = async (req, res) => {
 
       if (dubbedTrailerUrl) {
         try {
-          const trailerFileName = dubbedTrailerUrl.split('/').pop();
+          const trailerFileName = decodeURIComponent(dubbedTrailerUrl.split('/').pop());
           const trailerResult = await transferFilesBetweenBuckets(
             dubbedTrailerUrl,
             orgName,
@@ -71,7 +81,7 @@ export const transferFileController = async (req, res) => {
             `dubbedTrailer/${language}`
           );
           dubbedEntry.dubbedTrailerFileName = trailerFileName;
-          dubbedEntry.dubbedTrailerUrl = trailerResult.destinationUrl;
+          dubbedEntry.dubbedTrailerUrl = trailerResult.url;
         } catch (err) {
           errors.push({ fileType: `dubbedTrailer/${language}`, error: err.message });
         }
@@ -79,7 +89,7 @@ export const transferFileController = async (req, res) => {
 
       if (dubbedSubtitleUrl) {
         try {
-          const subtitleFileName = dubbedSubtitleUrl.split('/').pop();
+          const subtitleFileName = decodeURIComponent(dubbedSubtitleUrl.split('/').pop());
           const subtitleResult = await transferFilesBetweenBuckets(
             dubbedSubtitleUrl,
             orgName,
@@ -90,7 +100,7 @@ export const transferFileController = async (req, res) => {
             `dubbedSubtitle/${language}`
           );
           dubbedEntry.dubbedSubtitleFileName = subtitleFileName;
-          dubbedEntry.dubbedSubtitleUrl = subtitleResult.destinationUrl;
+          dubbedEntry.dubbedSubtitleUrl = subtitleResult.url;
         } catch (err) {
           errors.push({ fileType: `dubbedSubtitle/${language}`, error: err.message });
         }
@@ -103,7 +113,7 @@ export const transferFileController = async (req, res) => {
       const { language, srtUrl } = entry;
       if (srtUrl) {
         try {
-          const fileName = srtUrl.split('/').pop();
+          const fileName = decodeURIComponent(srtUrl.split('/').pop());
           const srtResult = await transferFilesBetweenBuckets(
             srtUrl,
             orgName,
@@ -116,7 +126,7 @@ export const transferFileController = async (req, res) => {
           transferredSrtFiles.push({
             language,
             fileName,
-            srtUrl: srtResult.destinationUrl,
+            srtUrl: srtResult.url,
           });
         } catch (err) {
           errors.push({ fileType: `srt/${language}`, error: err.message });
@@ -127,7 +137,7 @@ export const transferFileController = async (req, res) => {
     for (let docUrl of infoDocs) {
       if (typeof docUrl === 'string') {
         try {
-          const fileName = docUrl.split('/').pop();
+          const fileName = decodeURIComponent(docUrl.split('/').pop());
           const docResult = await transferFilesBetweenBuckets(
             docUrl,
             orgName,
@@ -139,10 +149,14 @@ export const transferFileController = async (req, res) => {
           );
           transferredInfoDocs.push({
             fileName,
-            docUrl: docResult.destinationUrl,
+            docUrl: docResult.url,
           });
         } catch (err) {
-          errors.push({ fileType: 'infoDocs', fileName: docUrl.split('/').pop(), error: err.message });
+          errors.push({
+            fileType: 'infoDocs',
+            fileName: decodeURIComponent(docUrl.split('/').pop()),
+            error: err.message,
+          });
         }
       }
     }
@@ -157,14 +171,18 @@ export const transferFileController = async (req, res) => {
       dubbedFiles: transferredDubbedFiles,
       srtFiles: transferredSrtFiles,
       infoDocs: transferredInfoDocs,
-      errors
+      errors,
     });
 
   } catch (error) {
     console.error('❌ Fatal error during file transfer:', error);
-    return res.status(500).json({ success: false, error: error.message || 'Internal server error.' });
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'Internal server error.',
+    });
   }
 };
+
 
 
 
