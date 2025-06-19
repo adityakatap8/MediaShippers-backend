@@ -2,14 +2,17 @@ import AWS from 'aws-sdk';
 import dotenv from 'dotenv';
 import { spawn } from 'child_process';
 
-import fs from 'fs';
-import path from 'path';
-import { tmpdir } from 'os';
-import { promisify } from 'util';
-import fetch from 'node-fetch';
+import fs from "fs";
+import path from "path";
+import https from "https";
+import os from "os";
+import axios from 'axios';
 
 
 dotenv.config();
+
+
+
 
 const s3 = new AWS.S3({
     accessKeyId: process.env.AWS_ACCESS_KEY_ID,
@@ -263,33 +266,47 @@ export const deleteFile = async (filePath) => {
 
 // Function to delete a folder by deleting all objects (files and subfolders) inside it
 export const deleteFolder = async (folderPath) => {
-    const params = {
+  try {
+    let continuationToken = undefined;
+
+    do {
+      const params = {
         Bucket: process.env.S3_BUCKET_NAME,
-        Prefix: folderPath, // Use folder path as the prefix to list objects inside the folder
-    };
+        Prefix: folderPath,
+        ContinuationToken: continuationToken,
+      };
 
-    try {
-        const listedObjects = await s3.listObjectsV2(params).promise();
+      // List objects with continuation token for pagination
+      const listedObjects = await s3.listObjectsV2(params).promise();
 
-        if (listedObjects.Contents.length === 0) {
-            console.log('Folder is empty or does not exist.');
-            return;
-        }
+      if (!listedObjects.Contents || listedObjects.Contents.length === 0) {
+        console.log('Folder is empty or does not exist.');
+        break;
+      }
 
-        const deleteParams = {
-            Bucket: process.env.S3_BUCKET_NAME,
-            Delete: {
-                Objects: listedObjects.Contents.map(({ Key }) => ({ Key })),
-            },
-        };
+      // Prepare objects to delete
+      const deleteParams = {
+        Bucket: process.env.S3_BUCKET_NAME,
+        Delete: {
+          Objects: listedObjects.Contents.map(({ Key }) => ({ Key })),
+          Quiet: false,
+        },
+      };
 
-        await s3.deleteObjects(deleteParams).promise();
-        console.log(`Folder ${folderPath} and its contents deleted successfully.`);
-    } catch (error) {
-        console.error('Error deleting folder:', error);
-        throw new Error('Failed to delete folder from S3');
-    }
+      // Delete objects
+      await s3.deleteObjects(deleteParams).promise();
+      console.log(`Deleted ${listedObjects.Contents.length} objects from folder ${folderPath}`);
+
+      continuationToken = listedObjects.IsTruncated ? listedObjects.NextContinuationToken : undefined;
+    } while (continuationToken);
+
+    console.log(`Folder ${folderPath} and all its contents deleted successfully.`);
+  } catch (error) {
+    console.error('Error deleting folder:', error);
+    throw new Error('Failed to delete folder from S3');
+  }
 };
+
 
 // Recursive function to delete a folder along with its contents (subfolders and files)
 export const deleteFolderAndContents = async (folderPath) => {
@@ -382,8 +399,18 @@ export const getSubfoldersForProject = async (orgName, projectName) => {
 };
 
 
+const convertS3UriToHttpUrl = (s3Uri) => {
+  if (!s3Uri.startsWith('s3://')) return s3Uri;
+  const [, bucketAndKey] = s3Uri.split('s3://');
+  const [bucket, ...keyParts] = bucketAndKey.split('/');
+  const key = keyParts.join('/');
+  return `https://${bucket}.s3.amazonaws.com/${encodeURIComponent(key)}`;
+};
 
 
+/**
+ * Transfers a file from a source URL (HTTPS or S3 URI) to a specific folder in an S3 bucket.
+ */
 export const transferFilesBetweenBuckets = async (
   sourceUrl,
   orgName,
@@ -393,14 +420,14 @@ export const transferFilesBetweenBuckets = async (
   secretAccessKey,
   fileType
 ) => {
-  return new Promise((resolve, reject) => {
+  try {
     console.log("🔄 Starting file transfer...");
     console.log("📄 File type:", fileType);
-    console.log("📦 Source URL:", sourceUrl);
+    console.log("📘 Source URL (should be HTTPS):", sourceUrl);
     console.log("📁 Destination folder:", `${orgName}/${projectFolder}`);
     console.log("📛 File name:", fileName);
 
-    // Step 1: Validate file type
+    // Map file type to folder
     const folderMap = {
       poster: "film stills",
       banner: "film stills",
@@ -410,76 +437,63 @@ export const transferFilesBetweenBuckets = async (
 
     const folder = folderMap[fileType];
     if (!folder) {
-      console.log("❌ Invalid file type detected");
-      return reject({ error: `❌ Invalid file type provided: ${fileType}` });
+      throw new Error(`Invalid file type: ${fileType}`);
     }
+
+    // Build destination S3 key and URL
+    const destinationKey = `${orgName}/${projectFolder}/${folder}/${fileName}`;
+    const destinationUrl = `https://mediashippers-filestash.s3.amazonaws.com/${destinationKey}`;
     console.log("📂 Mapped folder:", folder);
+    console.log("📥 Destination S3 URL:", destinationUrl);
 
-    // Step 2: Build destination S3 URI
-    const destinationUrl = `s3://testmediashippers/${orgName}/${projectFolder}/${folder}/${fileName}`;
-    console.log("📥 Destination S3 URI:", destinationUrl);
+    // ✅ Normalize the source URL if it starts with s3://
+    let normalizedSourceUrl = sourceUrl;
+    if (sourceUrl.startsWith('s3://')) {
+      const [, bucketAndKey] = sourceUrl.split('s3://');
+      const [bucket, ...keyParts] = bucketAndKey.split('/');
+      const key = keyParts.join('/');
+      normalizedSourceUrl = `https://${bucket}.s3.amazonaws.com/${encodeURIComponent(key)}`;
+    }
 
-    // Step 3: Path to AWS CLI (Windows)
-    const awsPath = "C:/Program Files/Amazon/AWSCLIV2/aws.exe";
+    console.log("🔗 Normalized Source URL:", normalizedSourceUrl);
 
-    // Step 4: Setup AWS env variables
-    const envVars = {
-      ...process.env,
-      AWS_ACCESS_KEY_ID: accessKeyId,
-      AWS_SECRET_ACCESS_KEY: secretAccessKey,
+    // Configure AWS SDK
+    const s3 = new AWS.S3({
+      accessKeyId,
+      secretAccessKey,
+      region: 'us-east-1',
+    });
+
+    // Step 1: Download the file from the source URL
+    const response = await axios.get(normalizedSourceUrl, { responseType: 'arraybuffer' });
+    const fileBuffer = Buffer.from(response.data);
+    console.log(`⬇️ File downloaded, size: ${fileBuffer.length} bytes`);
+
+    // Step 2: Upload the file to the destination bucket
+    const uploadResult = await s3.upload({
+      Bucket: BUCKET_NAME,
+      Key: destinationKey,
+      Body: fileBuffer,
+      ContentType: response.headers['content-type'],
+    }).promise();
+
+    console.log("✅ File uploaded successfully!");
+    console.log("🌐 Public URL:", uploadResult.Location);
+
+    return {
+      message: "File transferred successfully",
+      url: uploadResult.Location,
     };
 
-    console.log("🔑 AWS credentials set (keys hidden for security)");
-
-    // Step 5: Show CLI command to run
-    console.log(`🚀 Running AWS CLI command: ${awsPath} s3 cp "${sourceUrl}" "${destinationUrl}"`);
-
-    const s3Command = spawn(awsPath, ['s3', 'cp', sourceUrl, destinationUrl], { env: envVars });
-
-    let output = "";
-    let errorOutput = "";
-
-    s3Command.stdout.on("data", (data) => {
-      const text = data.toString();
-      console.log("📤 CLI STDOUT:", text);
-      output += text;
-    });
-
-    s3Command.stderr.on("data", (data) => {
-      const errText = data.toString();
-      console.error("⚠️ CLI STDERR:", errText);
-      errorOutput += errText;
-    });
-
-    s3Command.on("close", (code) => {
-      console.log("🔚 AWS CLI process exited with code:", code);
-
-      const isNonBlockingError =
-        code === 255 &&
-        errorOutput.includes("does not exist") &&
-        sourceUrl.startsWith("https://");
-
-      if (code === 0) {
-        console.log("✅ File transferred successfully!");
-        resolve({ message: "File transferred successfully", output });
-      } else if (isNonBlockingError) {
-        console.warn("⚠️ Known AWS CLI error for HTTPS source - ignoring and proceeding.");
-        resolve({
-          message: "File transfer logically completed (CLI skipped due to HTTPS)",
-          skippedAwsCli: true,
-          warning: errorOutput,
-        });
-      } else {
-        console.error("❌ CLI error output:", errorOutput);
-        reject({ error: `AWS CLI process exited with code ${code}`, errorOutput });
-      }
-    });
-
-    s3Command.on("error", (err) => {
-      console.error("❌ Failed to spawn AWS CLI:", err.message);
-      reject({ error: `Failed to spawn AWS CLI: ${err.message}` });
-    });
-  });
+  } catch (err) {
+    console.error("❌ Transfer error:", err.message);
+    return {
+      error: err.message,
+    };
+  }
 };
+
+
+
 
 

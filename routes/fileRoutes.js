@@ -2,7 +2,7 @@
 
 import express from 'express';
 import multer from 'multer';
-import { uploadFileToS3 } from '../services/s3Service.js';
+import { uploadFileToS3,deleteFile,deleteFolder } from '../services/s3Service.js';
 import ProjectInfo from '../models/projectFormModels/FormModels/ProjectInfoSchema.js';
 import SrtInfoFileSet from '../models/projectFormModels/FormModels/SrtInfoFileSchema.js';
 
@@ -158,5 +158,45 @@ router.post('/upload-file', upload.any(), async (req, res) => {
     res.status(500).send(error.message);
   }
 });
+
+
+// DELETE a file from S3
+router.delete('/delete-file', async (req, res) => {
+  try {
+    const { filePath } = req.query;
+
+    if (!filePath) {
+      return res.status(400).json({ message: 'Missing filePath query param' });
+    }
+
+    await deleteFile(filePath);
+    res.status(200).json({ message: 'File deleted successfully' });
+  } catch (error) {
+    console.error('❌ Error deleting file:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+
+// DELETE a folder and all contents from S3
+router.delete('/delete-folder', async (req, res) => {
+  try {
+    // Folder path should come in request body (as JSON)
+    const { folderPath } = req.body;
+
+    if (!folderPath) {
+      return res.status(400).json({ message: 'Missing folderPath in request body' });
+    }
+
+    await deleteFolder(folderPath);
+
+    res.status(200).json({ message: `Folder "${folderPath}" deleted successfully` });
+  } catch (error) {
+    console.error('❌ Error deleting folder:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+
 
 export default router;
