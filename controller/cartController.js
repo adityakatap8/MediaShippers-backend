@@ -34,16 +34,28 @@ export const addToCart = async (req, res) => {
 
     const existingMovieIds = cart.movies.map(m => m.movieId);
 
+    const alreadyInCart = movies.filter(m => existingMovieIds.includes(m.movieId));
     const newMovies = movies.filter(m => !existingMovieIds.includes(m.movieId));
 
-    if (newMovies.length === 0) {
-      return res.status(409).json({ message: 'All movies already exist in cart' });
+    if (newMovies.length > 0) {
+      cart.movies.push(...newMovies);
+      await cart.save();
     }
 
-    cart.movies.push(...newMovies);
-    await cart.save();
+    let message;
+    if (newMovies.length === 0) {
+      message = `Great news! All the movies you selected are already in your cart: ${alreadyInCart.map(m => `"${m.title}"`).join(', ')}.`;
+    } else if (alreadyInCart.length === 0) {
+      message = `Success! The following movies have been added to your cart: ${newMovies.map(m => `"${m.title}"`).join(', ')}.`;
+    } else {
+      message = `Success! The following movies have been added to your cart: ${newMovies.map(m => `"${m.title}"`).join(', ')}. The following movies were already in your cart: ${alreadyInCart.map(m => `"${m.title}"`).join(', ')}.`;
+    }
 
-    res.json(cart.movies);
+    res.json({
+      message,
+      addedMovies: newMovies,
+      alreadyInCart: alreadyInCart,
+    });
   } catch (err) {
     res.status(500).json({ error: 'Failed to add movies' });
   }
