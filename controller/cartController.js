@@ -37,27 +37,24 @@ export const addToCart = async (req, res) => {
     const alreadyInCart = movies.filter(m => existingMovieIds.includes(m.movieId));
     const newMovies = movies.filter(m => !existingMovieIds.includes(m.movieId));
 
+    let message;
+    if (newMovies.length === 0) {
+      message = `All selected movies are already in your cart: ${alreadyInCart.map(m => `"${m.title}"`).join(', ')}.`;
+      return res.status(409).json({ message, cartMovies: cart.movies }); // Conflict status code for no new movies added
+    } else if (alreadyInCart.length === 0) {
+      message = `Movies added to your cart successfully: ${newMovies.map(m => `"${m.title}"`).join(', ')}.`;
+      res.status(201).json({ message, cartMovies: cart.movies }); // Created status code for all new movies added
+    } else {
+      message = `Movies added to your cart: ${newMovies.map(m => `"${m.title}"`).join(', ')}.\nAlready in cart: ${alreadyInCart.map(m => `"${m.title}"`).join(', ')}.`;
+      res.status(200).json({ message, cartMovies: cart.movies }); // OK status code for partial addition
+    }
+
     if (newMovies.length > 0) {
       cart.movies.push(...newMovies);
       await cart.save();
     }
-
-    let message;
-    if (newMovies.length === 0) {
-      message = `Great news! All the movies you selected are already in your cart: ${alreadyInCart.map(m => `"${m.title}"`).join(', ')}.`;
-    } else if (alreadyInCart.length === 0) {
-      message = `Success! The following movies have been added to your cart: ${newMovies.map(m => `"${m.title}"`).join(', ')}.`;
-    } else {
-      message = `Success! The following movies have been added to your cart: ${newMovies.map(m => `"${m.title}"`).join(', ')}. The following movies were already in your cart: ${alreadyInCart.map(m => `"${m.title}"`).join(', ')}.`;
-    }
-
-    res.json({
-      message,
-      addedMovies: newMovies,
-      alreadyInCart: alreadyInCart,
-    });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to add movies' });
+    res.status(500).json({ error: 'Failed to add movies' }); // Internal Server Error for unexpected issues
   }
 };
 
