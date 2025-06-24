@@ -30,7 +30,15 @@ export const addToCart = async (req, res) => {
 
   try {
     let cart = await Cart.findOne({ userId });
-    if (!cart) cart = new Cart({ userId, movies: [] });
+    if (!cart) {
+      // Create a new cart and save it immediately
+      cart = new Cart({ userId, movies });
+      await cart.save(); // Save the newly created cart
+      return res.status(201).json({
+        message: `Movies added to your cart successfully: ${movies.map(m => `"${m.title}"`).join(', ')}.`,
+        cartMovies: cart.movies,
+      });
+    }
 
     const existingMovieIds = cart.movies.map(m => m.movieId);
 
