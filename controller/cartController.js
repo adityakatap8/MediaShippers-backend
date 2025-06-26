@@ -30,22 +30,58 @@ export const addToCart = async (req, res) => {
 
   try {
     let cart = await Cart.findOne({ userId });
-    if (!cart) cart = new Cart({ userId, movies: [] });
+    if (!cart) {
+      // Create a new cart and save it immediately
+      cart = new Cart({ userId, movies });
+      await cart.save(); // Save the newly created cart
+
+      // Fetch the updated cart
+      const updatedCart = await Cart.findOne({ userId });
+
+      return res.status(201).json({
+        message: `Movies added to your cart successfully: ${movies.map(m => `"${m.title}"`).join(', ')}.`,
+        cartMovies: updatedCart.movies, // Return the latest cart data
+      });
+    }
 
     const existingMovieIds = cart.movies.map(m => m.movieId);
 
+    const alreadyInCart = movies.filter(m => existingMovieIds.includes(m.movieId));
     const newMovies = movies.filter(m => !existingMovieIds.includes(m.movieId));
 
+    let message;
     if (newMovies.length === 0) {
-      return res.status(409).json({ message: 'All movies already exist in cart' });
+      message = `All selected movies are already in your cart: ${alreadyInCart.map(m => `"${m.title}"`).join(', ')}.`;
+
+      // Fetch the updated cart
+      const updatedCart = await Cart.findOne({ userId });
+
+      return res.status(409).json({ message, cartMovies: updatedCart.movies }); // Conflict status code for no new movies added
+    } else if (alreadyInCart.length === 0) {
+      message = `Movies added to your cart successfully: ${newMovies.map(m => `"${m.title}"`).join(', ')}.`;
+
+      // Add new movies and save the cart
+      cart.movies.push(...newMovies);
+      await cart.save();
+
+      // Fetch the updated cart
+      const updatedCart = await Cart.findOne({ userId });
+
+      return res.status(201).json({ message, cartMovies: updatedCart.movies }); // Created status code for all new movies added
+    } else {
+      message = `Movies added to your cart: ${newMovies.map(m => `"${m.title}"`).join(', ')}.\nAlready in cart: ${alreadyInCart.map(m => `"${m.title}"`).join(', ')}.`;
+
+      // Add new movies and save the cart
+      cart.movies.push(...newMovies);
+      await cart.save();
+
+      // Fetch the updated cart
+      const updatedCart = await Cart.findOne({ userId });
+
+      return res.status(200).json({ message, cartMovies: updatedCart.movies }); // OK status code for partial addition
     }
-
-    cart.movies.push(...newMovies);
-    await cart.save();
-
-    res.json(cart.movies);
   } catch (err) {
-    res.status(500).json({ error: 'Failed to add movies' });
+    res.status(500).json({ error: 'Failed to add movies' }); // Internal Server Error for unexpected issues
   }
 };
 

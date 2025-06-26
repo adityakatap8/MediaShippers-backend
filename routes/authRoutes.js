@@ -1,5 +1,3 @@
-
-
 import express from 'express';
 import { Router } from 'express';
 import { User } from '../models/User.js';
@@ -588,6 +586,51 @@ authRoutes.get('/user/org/:userId', async (req, res) => {
     res.status(500).json({
       success: false,
       errorMessage: 'Failed to fetch user organization data',
+      errorDetails: error.message,
+    });
+  }
+});
+
+// Admin API to activate or deactivate a user
+authRoutes.patch('/user/:userId/toggle-approval', async (req, res) => {
+  const { userId } = req.params;
+  const { isApproved } = req.body; 
+
+  try {
+
+    // Find the user by ID
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        errorMessage: 'User not found',
+      });
+    }
+
+    // Update the isApproved field
+    user.isApproved = isApproved;
+    user.updatedAt = new Date(); // Update the timestamp
+    await user.save();
+
+    const statusMessage = isApproved
+      ? 'User activated successfully'
+      : 'User deactivated successfully';
+
+    res.status(200).json({
+      success: true,
+      message: statusMessage,
+      user: {
+        userId: user._id,
+        name: user.name,
+        email: user.email,
+        isApproved: user.isApproved,
+      },
+    });
+  } catch (error) {
+    console.error('Error toggling user approval:', error.message);
+    res.status(500).json({
+      success: false,
+      errorMessage: 'Failed to toggle user approval',
       errorDetails: error.message,
     });
   }
