@@ -222,10 +222,14 @@ deleteProject : async (req, res) => {
 
 
 
-deleteFileFromS3 : async (req, res) => {
+deleteFileFromS3: async (req, res) => {
   try {
     const { fileUrl, filePath } = req.query;
     const bucketName = process.env.S3_BUCKET_NAME;
+
+    if (!bucketName) {
+      return res.status(500).json({ error: 'S3_BUCKET_NAME is not configured in environment variables' });
+    }
 
     let resolvedFilePath = '';
 
@@ -256,7 +260,7 @@ deleteFileFromS3 : async (req, res) => {
     console.log('🧹 Deleting file from S3:', resolvedFilePath);
 
     // Call the actual S3 delete function
-    await deleteFile(resolvedFilePath);
+    await deleteFile(resolvedFilePath); // assumed to call AWS SDK
 
     return res.status(200).json({ message: 'File deleted successfully from S3' });
   } catch (error) {
@@ -264,6 +268,7 @@ deleteFileFromS3 : async (req, res) => {
     return res.status(500).json({ error: 'Failed to delete file from S3' });
   }
 },
+
 
 
 
