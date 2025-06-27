@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 import ProjectFormViewerService from '../services/projectFormViewerService.js';
 import multer from 'multer';
 import jwt from 'jsonwebtoken';
-import { deleteFolder } from '../services/s3Service.js'
+import { deleteFolder, deleteFileFromUrl,deleteFile  } from '../services/s3Service.js'
 
 // Mongoose models
 import ProjectForm from '../models/projectFormModels/ProjectForm.js';
@@ -155,61 +155,116 @@ updateMultipleSections: async (req, res) => {
 ,
 
 
-// deleteProject: async (req, res) => {
-//   const { id: projectId } = req.params;
-
-//   try {
-//     if (!mongoose.Types.ObjectId.isValid(projectId)) {
-//       return res.status(400).json({ error: 'Invalid project ID format' });
-//     }
-
-//     const deleteResult = await ProjectInfo.deleteOne({ _id: projectId });
-
-//     if (deleteResult.deletedCount === 0) {
-//       return res.status(404).json({ error: 'Project not found' });
-//     }
-
-//     res.json({ message: 'Project deleted successfully' });
-//   } catch (error) {
-//     console.error('Error deleting project:', error.message);
-//     res.status(500).json({ error: 'Internal server error' });
-//   }
-// },
 
 
+
+// ✅ Controller function
 deleteProject : async (req, res) => {
   const { id: projectId } = req.params;
-  const { orgName, projectName } = req.body; // 👈 Grab from body
+  const { orgName, projectName } = req.body;
 
   try {
     if (!mongoose.Types.ObjectId.isValid(projectId)) {
       return res.status(400).json({ error: 'Invalid project ID format' });
     }
 
-    // Delete project document from MongoDB
-    const deleteResult = await ProjectInfo.deleteOne({ _id: projectId });
-    if (deleteResult.deletedCount === 0) {
-      return res.status(404).json({ error: 'Project not found for deletion' });
+    const project = await ProjectInfo.findById(projectId);
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
     }
 
-    // Log and delete S3 folder
-    const folderPath = `${orgName}/${projectName}/`;
-    console.log(`🗂️ S3 folder path to delete: ${folderPath}`);
+    // Prepare deletions for linked documents
+    const deletions = [];
+
+    if (project.creditsInfoId) {
+      deletions.push(CreditsInfo.deleteOne({ _id: project.creditsInfoId }));
+    }
+
+    if (project.rightsInfoId) {
+      deletions.push(RightsInfoGroup.deleteOne({ _id: project.rightsInfoId }));
+    }
+
+    if (project.specificationsInfoId) {
+      deletions.push(SpecificationsInfo.deleteOne({ _id: project.specificationsInfoId }));
+    }
+
+    if (project.srtFilesId) {
+      deletions.push(SrtInfoFileSchema.deleteOne({ _id: project.srtFilesId }));
+    }
+
+    // Run all subdocument deletions in parallel
+    await Promise.all(deletions);
+
+    // Delete main project document
+    const deleteResult = await ProjectInfo.deleteOne({ _id: projectId });
+    if (deleteResult.deletedCount === 0) {
+      return res.status(404).json({ error: 'Project could not be deleted' });
+    }
+
+    // Delete S3 folder
+    const folderPath = `${orgName}/${project.projectName}/`;
+    console.log(`🗂️ Deleting S3 folder: ${folderPath}`);
 
     try {
-      await deleteFolder(folderPath); // from your s3 service
-      console.log(`✅ S3 folder deleted: ${folderPath}`);
+      await deleteFolder(folderPath); // assumes this is defined elsewhere
+      console.log(`✅ S3 folder deleted`);
     } catch (s3Error) {
       console.error(`❌ Failed to delete S3 folder: ${s3Error.message}`);
     }
 
-    return res.status(200).json({ message: 'Project and associated S3 folder deleted successfully.' });
+    return res.status(200).json({ message: 'Project and all related data deleted successfully' });
 
   } catch (error) {
-    console.error('Error deleting project:', error.message);
+    console.error('❌ Error deleting project:', error.message);
     return res.status(500).json({ error: 'Internal server error' });
   }
 },
+
+
+
+deleteFileFromS3 : async (req, res) => {
+  try {
+    const { fileUrl, filePath } = req.query;
+    const bucketName = process.env.S3_BUCKET_NAME;
+
+    let resolvedFilePath = '';
+
+    if (filePath) {
+      resolvedFilePath = decodeURIComponent(filePath);
+    } else if (fileUrl) {
+      let urlObj;
+      try {
+        urlObj = new URL(fileUrl);
+      } catch (e) {
+        return res.status(400).json({ error: 'Invalid URL format' });
+      }
+
+      if (
+        !urlObj.hostname.includes(bucketName) ||
+        !urlObj.hostname.includes('amazonaws.com')
+      ) {
+        return res.status(400).json({ error: 'Invalid S3 file URL. Must include correct bucket domain.' });
+      }
+
+      resolvedFilePath = decodeURIComponent(
+        urlObj.pathname.startsWith('/') ? urlObj.pathname.slice(1) : urlObj.pathname
+      );
+    } else {
+      return res.status(400).json({ error: 'Missing fileUrl or filePath query parameter' });
+    }
+
+    console.log('🧹 Deleting file from S3:', resolvedFilePath);
+
+    // Call the actual S3 delete function
+    await deleteFile(resolvedFilePath);
+
+    return res.status(200).json({ message: 'File deleted successfully from S3' });
+  } catch (error) {
+    console.error('❌ Error deleting file from S3:', error.message);
+    return res.status(500).json({ error: 'Failed to delete file from S3' });
+  }
+},
+
 
 
 
