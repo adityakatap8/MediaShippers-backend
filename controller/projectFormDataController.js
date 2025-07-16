@@ -447,11 +447,21 @@ deleteFileMetadata: async (req, res) => {
       const populatedProjects = await Promise.all(
         projects.map(async project => {
           const form = projectForms.find(f => f.projectInfo.toString() === project._id.toString()) || {};
+          console.log("form", form);
           const populatedForm = {
-            ...form,
-            specificationsInfo: await SpecificationsInfo.findById(form.specificationsInfo),
-            creditsInfo: await CreditsInfo.findById(form.creditsInfo),
-            rightsInfo: await RightsInfoGroup.find({ _id: { $in: form.rightsInfoGroup } }),
+            ...form.toObject(),
+            specificationsInfo: form.specificationsInfo
+              ? await SpecificationsInfo.findById(form.specificationsInfo)
+              : null,
+            creditsInfo: form.creditsInfo
+              ? await CreditsInfo.findById(form.creditsInfo)
+              : null,
+            rightsInfo: form.rightsInfo && form.rightsInfo.length > 0
+              ? await RightsInfoGroup.find({ _id: { $in: form.rightsInfo } })
+              : [],
+            screeningsInfo: form.screeningsInfo && form.screeningsInfo.length > 0
+              ? await ScreeningsInfo.find({ _id: { $in: form.screeningsInfo } })
+              : [],
           };
 
           return {
