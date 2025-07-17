@@ -24,9 +24,13 @@ projectFormRouter.patch('/update/:id', projectFormDataController.updateMultipleS
 
 projectFormRouter.delete('/delete/:id', projectFormDataController.deleteProject);
 
+projectFormRouter.delete('/delete-file', projectFormDataController.deleteFileFromS3);
+
+projectFormRouter.delete('/delete-file-metadata/:id', projectFormDataController.deleteFileMetadata);
+
 projectFormRouter.get('/specifications/:id', projectFormDataController.getSpecificationsInfo);
 
-// ----------------------
+// ----------------------ac
 // 📌 View Routes (Non-editable display logic)
 // ----------------------
 // projectFormRouter.get('/view/:id', projectViewController.getProjectViewById);

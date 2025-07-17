@@ -8,95 +8,44 @@ export const createDealWithMessage = async (req, res) => {
   const {
     senderId,
     receiverId,
-    movies,
     rights,
-    territory,
-    licenseTerm,
     usageRights,
-    paymentTerms,
+    includingRegions,
+    excludingCountries,
+    contentCategory,
+    languages,
+    genre,
+    yearOfRelease,
     status,
-    remarks,
-    message
   } = req.body;
-
-  console.log("message", message);
 
   try {
     // Create the deal
     const deal = new Deal({
       senderId,
       assignedTo: receiverId,
-      movies,
+      requirementTitle: `${contentCategory} in ${languages?.join(', ')} (${genre}, ${yearOfRelease}) for ${includingRegions?.join(', ')}`,
       rights,
-      territory,
-      licenseTerm,
       usageRights,
-      paymentTerms,
-      status: status || 'pending',
-      remarks
+      includingRegions,
+      excludingCountries,
+      contentCategory,
+      languages,
+      genre,
+      yearOfRelease,
+      status,
     });
 
-    const sender = await User.findById(senderId);
-    const receiver = await User.findById(receiverId);
-
-    if (!sender || !receiver) {
-      return res.status(404).json({ error: 'Sender or receiver not found' });
-    }
-
-    const senderRole = sender.role;
-    const receiverRole = receiver.role;
 
     const savedDeal = await deal.save();
-
-    let visibleTo = [];
-    if (senderRole === 'Buyer' && receiverRole === 'Admin') {
-      visibleTo = ['Admin', 'Buyer']; // Admin and Buyer can see this message
-    } else if (senderRole === 'Admin' && receiverRole === 'Buyer') {
-      visibleTo = ['Admin', 'Buyer']; // Admin and Buyer can see this message
-    } else if (senderRole === 'Admin' && receiverRole === 'Seller') {
-      visibleTo = ['Admin', 'Seller']; // Admin and Seller can see this message
-    } else if (senderRole === 'Seller' && receiverRole === 'Admin') {
-      visibleTo = ['Admin', 'Seller']; // Admin and seller can see this message
-    }
-
-    // Create the message linked to the deal
-    const newMessage = new Message({
-      dealId: savedDeal._id,
-      senderId: message.senderId,
-      receiverId,
-      message: message.content,
-      visibleTo
-    });
-
-    const savedMessage = await newMessage.save();
-
-    // Update the deal's history with the new message ID
-    savedDeal.history.push(savedMessage._id);
     await savedDeal.save();
 
-    console.log('Deal created:', movies);
-
-    // Extract movie IDs as strings
-    const movieIds = movies.map(movie => String(movie.movieId));
-    console.log('Movie IDs to remove:', movieIds);
-
-    // Remove the submitted movies from the cart
-    await Cart.updateOne(
-      { userId: senderId }, // Find the cart for the user
-      { $pull: { movies: { movieId: { $in: movieIds } } } } // Remove movies by movieId
-    );
-
-    // Fetch the updated cart to get the remaining movies
-    const updatedCart = await Cart.findOne({ userId: senderId });
-
-    console.log('Updated cart:', updatedCart);
+    
 
     res.status(201).json({
-      message: 'Deal created, initial message added, and movies removed from cart successfully',
+      message: 'Deal created successfully',
       deal: savedDeal,
-      initialMessage: savedMessage,
-      remainingMovies: updatedCart ? updatedCart.movies : [] // Return remaining movies
-    });
+     });
   } catch (error) {
     console.error('Error creating deal and message:', error);
     res.status(500).json({ error: 'Failed to create deal and message' });
@@ -633,16 +582,17 @@ export const sellerActionOnMovies = async (req, res) => {
       return res.status(400).json({ message: 'No movie actions provided' });
     }
 
-    
+
     const deal = await Deal.findById(dealId);
     if (!deal) return res.status(404).json({ message: 'Deal not found' });
-    
+    console.log('Deal found:', deal);
     let updated = false;
 
     movies.forEach(({ movieId, status, remarks }) => {
       if (!['accepted', 'rejected', 'negotiation'].includes(status)) return;
 
-      const movie = deal.movies.find(m => m.movieId === movieId);
+      const movie = deal.movies.find(m => m.movieId.toString() === movieId.toString());
+      console.log('Processing movie:', movie);
       if (movie) {
         movie.status = status;
         movie.remarks = remarks || '';
@@ -655,7 +605,7 @@ export const sellerActionOnMovies = async (req, res) => {
 
     if (!updated) return res.status(400).json({ message: 'No valid movie updates found' });
 
-    deal.status = 'sent_to_shipper';
+    deal.status = 'shortlisted_by_buyer';
 
     deal.updatedAt = new Date();
     await deal.save();
@@ -665,6 +615,90 @@ export const sellerActionOnMovies = async (req, res) => {
   } catch (error) {
     console.error('Error in seller action:', error);
     res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+export const updateDealWithMessageAndRemoveFromCart = async (req, res) => {
+  const { dealId, userId } = req.params; // Extract dealId and userId from request parameters
+  const { licenseTerm, paymentTerms, remarks, status, message } = req.body; // Extract payload details
+
+  if (!dealId || !userId || !message || !message.senderId || !message.reciverId || !message.content) {
+    return res.status(400).json({ message: 'dealId, userId, and valid message payload are required' });
+  }
+
+  try {
+    // 1. Find the deal by dealId
+    const deal = await Deal.findById(dealId);
+    if (!deal) {
+      return res.status(404).json({ message: 'Deal not found' });
+    }
+
+    // 2. Update the deal with new details
+    deal.licenseTerm = licenseTerm || deal.licenseTerm;
+    deal.paymentTerms = paymentTerms || deal.paymentTerms;
+    deal.remarks = remarks || deal.remarks;
+    deal.status = status || deal.status;
+    deal.updatedAt = new Date();
+
+    // 3. Fetch sender and receiver details
+    const sender = await User.findById(message.senderId);
+    const receiver = await User.findById(message.reciverId);
+
+    if (!sender || !receiver) {
+      return res.status(404).json({ error: 'Sender or receiver not found' });
+    }
+
+    const senderRole = sender.role;
+    const receiverRole = receiver.role;
+
+    // 4. Determine visibility based on roles
+    let visibleTo = [];
+    if (senderRole === 'Buyer' && receiverRole === 'Admin') {
+      visibleTo = ['Admin', 'Buyer']; // Admin and Buyer can see this message
+    } else if (senderRole === 'Admin' && receiverRole === 'Buyer') {
+      visibleTo = ['Admin', 'Buyer']; // Admin and Buyer can see this message
+    } else if (senderRole === 'Admin' && receiverRole === 'Seller') {
+      visibleTo = ['Admin', 'Seller']; // Admin and Seller can see this message
+    } else if (senderRole === 'Seller' && receiverRole === 'Admin') {
+      visibleTo = ['Admin', 'Seller']; // Admin and seller can see this message
+    }
+
+    // 5. Add the message to the deal's history
+    const newMessage = new Message({
+      dealId,
+      senderId: message.senderId,
+      receiverId: message.reciverId,
+      message: message.content,
+      visibleTo,
+    });
+
+    const savedMessage = await newMessage.save();
+    deal.history.push(savedMessage._id);
+
+    await deal.save();
+
+    // 6. Remove the deal from the cart
+    const cartUpdateResult = await Cart.updateOne(
+      { userId },
+      { $pull: { deals: { dealId } } } // Remove the deal from the cart
+    );
+
+    if (cartUpdateResult.modifiedCount === 0) {
+      return res.status(404).json({ message: 'Deal not found in the cart' });
+    }
+
+    const updatedCart = await Cart.findOne({ userId }).populate('deals.dealId');
+    const remainingDeals = updatedCart ? updatedCart.deals.map(deal => deal.dealId) : [];
+
+    res.status(200).json({
+      message: 'Deal updated successfully, message added, and deal removed from cart',
+      deal,
+      savedMessage,
+      remainingDeals
+    });
+  } catch (error) {
+    console.error('Error updating deal and removing from cart:', error);
+    res.status(500).json({ error: 'Failed to update deal and remove from cart' });
   }
 };
 

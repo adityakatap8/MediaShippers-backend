@@ -1,10 +1,12 @@
 import express from 'express';
-import { addMessageAndUpdateStatus, createDealWithMessage, getDealById, getDealsWithCounts, getUnreadMessageCount, markMessagesAsRead, getMessageHistory, splitDealToSellers, sellerActionOnMovies } from '../controller/dealController.js';
+import { addMessageAndUpdateStatus, createDealWithMessage, getDealById, getDealsWithCounts, getUnreadMessageCount, markMessagesAsRead, getMessageHistory, splitDealToSellers, sellerActionOnMovies, updateDealWithMessageAndRemoveFromCart } from '../controller/dealController.js';
 
 const router = express.Router();
 
 
 router.post('/create', createDealWithMessage);
+
+router.put('/update/:dealId/cart/:userId', updateDealWithMessageAndRemoveFromCart);
 
 router.post('/:dealId/message', addMessageAndUpdateStatus);
 

@@ -17,14 +17,22 @@ const RightsInfoGroupSchema = new mongoose.Schema(
       },
     ],
 
-    territories: [
-      {
-        name: { type: String },
-        id: { type: String }, 
-        country: { type: String },
-        region: { type: String },
-      },
-    ],
+    territories: {
+      includedRegions: [
+        {
+          name: { type: String },
+          id: { type: String },
+        },
+      ],
+      excludeCountries: [
+        {
+          name: { type: String },
+          id: { type: String },
+          selected: { type: Boolean },
+          region: { type: String },
+        },
+      ],
+    },
 
     licenseTerm: [
       {

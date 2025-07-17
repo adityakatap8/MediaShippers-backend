@@ -81,11 +81,11 @@ createProjectForm: async (
       console.log("🟢 Normalized genres:", specificationsInfo.genres);
     }
 
-    // ======= FIXED rightsInfo handling - unwrap nested arrays =======
+    // ======= FIXED rightsInfo handling =======
     let rightsInfoDoc = null;
     if (rightsInfo && typeof rightsInfo === "object") {
       let rightsArray = [];
-      let territoriesArray = [];
+      let territoriesObject = { includeRegions: [], excludeCountries: [] };
       let licenseTermArray = [];
       let platformTypeArray = [];
       let usageRightsArray = [];
@@ -93,11 +93,14 @@ createProjectForm: async (
       let listPriceValue = '';
 
       if (Array.isArray(rightsInfo.rights) && rightsInfo.rights.length > 0) {
-        // Assuming the first element contains the actual rights info object
         const firstRightsInfo = rightsInfo.rights[0];
 
         rightsArray = Array.isArray(firstRightsInfo.rights) ? firstRightsInfo.rights : [];
-        territoriesArray = Array.isArray(firstRightsInfo.territories) ? firstRightsInfo.territories : [];
+        territoriesObject =
+          firstRightsInfo.territories && typeof firstRightsInfo.territories === 'object'
+            ? firstRightsInfo.territories
+            : { includeRegions: [], excludeCountries: [] };
+
         licenseTermArray = Array.isArray(firstRightsInfo.licenseTerm) ? firstRightsInfo.licenseTerm : [];
         platformTypeArray = Array.isArray(firstRightsInfo.platformType) ? firstRightsInfo.platformType : [];
         usageRightsArray = Array.isArray(firstRightsInfo.usageRights) ? firstRightsInfo.usageRights : [];
@@ -109,7 +112,7 @@ createProjectForm: async (
         userId: cleanUserId,
         projectName: projectInfo.projectName,
         rights: rightsArray,
-        territories: territoriesArray,
+        territories: territoriesObject,
         licenseTerm: licenseTermArray,
         platformType: platformTypeArray,
         usageRights: usageRightsArray,
@@ -122,7 +125,6 @@ createProjectForm: async (
     } else {
       console.log("ℹ️ No rightsInfo object provided or invalid.");
     }
-    // ===========================================================================
 
     // Save main schemas
     const projectInfoDoc = new ProjectInfoSchema(projectData);
@@ -190,6 +192,7 @@ createProjectForm: async (
     throw new Error("Error saving project form: " + error.message);
   }
 }
+
 
 
 ,

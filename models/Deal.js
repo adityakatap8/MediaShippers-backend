@@ -1,53 +1,92 @@
 import mongoose from 'mongoose';
 
 const movieStatusSchema = new mongoose.Schema({
-    movieId: { type: String, required: true },
-    projectTitle: { type: String },
+    movieId: { type: mongoose.Schema.Types.ObjectId, ref: 'ProjectInfo' },
     userId: { type: String },
     status: {
-      type: String,
-      enum: ['pending', 'accepted', 'rejected', 'negotiation'],
-      default: 'pending'
+        type: String,
+        enum: ['pending', 'accepted', 'rejected', 'negotiation'],
+        default: 'pending'
     },
     remarks: { type: String, default: '' }, // optional comments or negotiation notes
     updatedAt: { type: Date, default: Date.now }
-  });
+});
 
 const dealSchema = new mongoose.Schema({
     senderId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    requirementTitle: {
+        type: String,
+        default: 'Untitled Requirement'
+    },
     movies: [movieStatusSchema],
-    rights: [String],
-    territory: [String],
-    licenseTerm: [String],
-    usageRights: [String],
-    paymentTerms: [String],
+    rights: {
+        type: String, 
+        required: true
+    },
+    usageRights: {
+        type: String, 
+        required: true
+    },
+    includingRegions: {
+        type: [String], // e.g., ['Asia', 'India']
+        default: []
+    },
+    excludingCountries: {
+        type: [String], // e.g., ['Pakistan', 'China']
+        default: []
+    },
+    contentCategory: {
+        type: [String], // e.g., 'Movie', 'Web Series'
+        required: true
+    },
+    languages: {
+        type: [String], // e.g., ['Hindi', 'English']
+        default: []
+    },
+    genre: {
+        type: [String], // e.g., ['Drama', 'Thriller']
+        default: []
+    },
+    yearOfRelease: {
+        type: [String], // e.g., ['2023', '2024']
+        default: []
+    },
+    licenseTerm: {
+        type: String
+    },
+    paymentTerms: {
+        type: String
+    },
+    budgetRange: {
+        min: { type: Number },
+        max: { type: Number }
+    },
     remarks: String,
     assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     parentDealId: { type: mongoose.Schema.Types.ObjectId, ref: 'Deal', default: null },
     status: {
         type: String,
         enum: [
-            'pending',
-            'sent_to_shipper',
-            'in_negotiation_shipper',
+            'submitted_by_buyer',
+            'admin_filtered_content',
+            'curated_list_sent_to_buyer',
+            'shortlisted_by_buyer',
             'sent_to_seller',
+            'deal_verified',
             'in_negotiation_seller',
-            'sent_to_buyer',
             'in_negotiation_buyer',
-            'verified',
-            'closed',
-            'rejected_by_shipper',
+            'rejected_by_buyer',
             'rejected_by_seller',
-            'rejected_by_buyer'
+            'deal_closed'
         ],
-        default: 'pending'
+        default: 'submitted_by_buyer'
     },
 
     // Track all transitions (audit trail)
     history: [
         {
             type: mongoose.Schema.Types.ObjectId,
-            ref: 'Message' 
+            ref: 'Message'
         }
     ],
 
