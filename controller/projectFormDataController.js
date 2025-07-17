@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 import ProjectFormViewerService from '../services/projectFormViewerService.js';
 import multer from 'multer';
 import jwt from 'jsonwebtoken';
-import { deleteFolder, deleteFileFromUrl,deleteFile  } from '../services/s3Service.js'
+import { deleteFolder, deleteFile  } from '../services/s3Service.js'
 
 // Mongoose models
 import ProjectForm from '../models/projectFormModels/ProjectForm.js';
