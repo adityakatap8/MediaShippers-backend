@@ -414,66 +414,86 @@ export const transferFilesBetweenBuckets = async (
   };
 
   try {
-    console.log(":arrows_anticlockwise: Starting file transfer...");
-    console.log(":page_facing_up: File type:", fileType);
-    console.log(":blue_book: Source URL (should be HTTPS):", sourceUrl);
-    console.log(":file_folder: Destination folder:", `${orgName}/${projectFolder}`);
-    console.log(":name_badge: File name:", fileName);
-    // Map file type to folder
-    const folderMap = {
-      poster: "film stills",
-      banner: "film stills",
-      trailer: "trailer",
-      movie: "master",
-    };
-    const folder = folderMap[fileType];
-    if (!folder) {
-      throw new Error(`Invalid file type: ${fileType}`);
+    const { bucket: srcBucket, key: srcKey } = parseS3Url(sourceUrl);
+    const { bucket: destBucket, key: destKey } = parseS3Url(destinationUrl);
+
+    console.log(`[${fileType}] Starting transfer from: s3://${srcBucket}/${srcKey}`);
+    console.log(`[${fileType}] Destination: s3://${destBucket}/${destKey}`);
+
+    // Check if source object exists
+    try {
+      await s3.headObject({ Bucket: srcBucket, Key: srcKey }).promise();
+      console.log(`[${fileType}] Verified source object exists.`);
+    } catch (headErr) {
+      throw new Error(`Source object does not exist at s3://${srcBucket}/${srcKey}: ${headErr.message}`);
     }
-    // Build destination S3 key and URL
-    const destinationKey = `${orgName}/${projectFolder}/${folder}/${fileName}`;
-    const destinationUrl = `https://testmediashippers.s3.amazonaws.com/${destinationKey}`;
-    console.log(":open_file_folder: Mapped folder:", folder);
-    console.log(":inbox_tray: Destination S3 URL:", destinationUrl);
-    // :white_tick: Normalize the source URL if it starts with s3://
-    let normalizedSourceUrl = sourceUrl;
-    if (sourceUrl.startsWith('s3://')) {
-      const [, bucketAndKey] = sourceUrl.split('s3://');
-      const [bucket, ...keyParts] = bucketAndKey.split('/');
-      const key = keyParts.join('/');
-      normalizedSourceUrl = `https://${bucket}.s3.amazonaws.com/${encodeURIComponent(key)}`;
+
+    // Copy object
+    try {
+      await s3.copyObject({
+        Bucket: destBucket,
+        Key: destKey,
+        CopySource: encodeURIComponent(`${srcBucket}/${srcKey}`), // must be URL-encoded
+        ACL: 'private', // or your desired ACL
+      }).promise();
+
+      console.log(`[${fileType}] Successfully copied to s3://${destBucket}/${destKey}`);
+      return { url: `https://${destBucket}.s3.amazonaws.com/${destKey}` };
+    } catch (copyErr) {
+      throw new Error(`Failed to copy ${fileType} from s3://${srcBucket}/${srcKey} to s3://${destBucket}/${destKey}: ${copyErr.message}`);
     }
-    // :white_tick: Fix any space accidentally added between bucket name and .s3.amazonaws.com
-    normalizedSourceUrl = normalizedSourceUrl.replace(/(https:\/\/[^\s\/]+)\s+(\.s3\.amazonaws\.com)/, '$1$2');
-    console.log(":link: Normalized Source URL:", normalizedSourceUrl);
-    // Configure AWS SDK
-    const s3 = new AWS.S3({
-      accessKeyId,
-      secretAccessKey,
-      region: 'us-east-1',
-    });
-    // Step 1: Download the file from the source URL
-    const response = await axios.get(normalizedSourceUrl, { responseType: 'arraybuffer' });
-    const fileBuffer = Buffer.from(response.data);
-    console.log(`:arrow_down: File downloaded, size: ${fileBuffer.length} bytes`);
-    // Step 2: Upload the file to the destination bucket
-    const uploadResult = await s3.upload({
-      Bucket: BUCKET_NAME,
-      Key: destinationKey,
-      Body: fileBuffer,
-      ContentType: response.headers['content-type'],
-    }).promise();
-    console.log(":white_tick: File uploaded successfully!");
-    console.log(":globe_with_meridians: Public URL:", uploadResult.Location);
-    return {
-      message: "File transferred successfully",
-      url: uploadResult.Location,
-    };
   } catch (err) {
-    console.error(":x: Transfer error:", err.message);
-    return {
-      error: err.message,
-    };
+    console.error(`[${fileType}] Transfer error: ${err.message}`);
+    throw err; // re-throw to be handled by caller
+  }
+};
+
+// Deletes a file from S3 using its full URL
+export const deleteFileFromUrl = async (fileUrl) => {
+  const bucketName = process.env.S3_BUCKET_NAME;
+  const region = process.env.AWS_REGION;
+
+  const possiblePrefixes = [
+    `https://${bucketName}.s3.${region}.amazonaws.com/`,
+    `https://${bucketName}.s3.amazonaws.com/`
+  ];
+
+  const matchedPrefix = possiblePrefixes.find(prefix => fileUrl.startsWith(prefix));
+
+  if (!matchedPrefix) {
+    throw new Error('Invalid S3 file URL. Must begin with correct bucket domain.');
+  }
+
+  // Extract the S3 key (file path)
+  const filePath = decodeURIComponent(fileUrl.replace(matchedPrefix, ''));
+
+  // Use your existing deleteFile function
+  await deleteFile(filePath);
+};
+
+
+
+// Function to delete a file from S3
+export const deleteFile = async (filePath) => {
+  const params = {
+    Bucket: process.env.S3_BUCKET_NAME,
+    Key: filePath, // The exact file path
+  };
+
+  try {
+    // Check if the file exists
+    await s3.headObject({ Bucket: process.env.S3_BUCKET_NAME, Key: filePath }).promise();
+    console.log(`File ${filePath} found. Proceeding with deletion.`);
+
+    await s3.deleteObject(params).promise();
+    console.log(`File ${filePath} deleted successfully.`);
+  } catch (error) {
+    if (error.code === 'NotFound') {
+      console.error(`File ${filePath} not found.`);
+    } else {
+      console.error('Error deleting file:', error);
+    }
+    throw new Error(`Failed to delete file from S3: ${error.message}`);
   }
 };
 
