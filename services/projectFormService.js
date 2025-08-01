@@ -317,7 +317,7 @@ bulkCreateProjectForms: async (projects, userId) => {
     const createdProjects = [];
     const skippedProjects = [];
 
-    // Utility to transform flat structure
+    // --- Inner utility to transform flat to nested ---
     function transformFlatToNestedProject(flatProject) {
       const {
         projectTitle,
@@ -343,15 +343,6 @@ bulkCreateProjectForms: async (projects, userId) => {
         genres,
         language,
         availableLanguages,
-        runtime,
-        completionDate,
-        rating,
-
-        rightsGroups = [],
-
-        // SRT and Info Document arrays
-        srtFiles = [],
-        infoDocuments = []
       } = flatProject;
 
       return {
@@ -369,27 +360,33 @@ bulkCreateProjectForms: async (projects, userId) => {
           projectTrailerS3Url,
           projectMovieS3Url,
           isPublic,
-          dubbedFileData,
+          dubbedFileData: Array.isArray(dubbedFileData)
+            ? dubbedFileData.map((item) => ({
+                language: item.language,
+                dubbedTrailerFileName: item.dubbedTrailerFileName,
+                dubbedTrailerUrl: item.dubbedTrailerUrl,
+                dubbedSubtitleFileName: item.dubbedSubtitleFileName,
+                dubbedSubtitleUrl: item.dubbedSubtitleUrl,
+              }))
+            : [],
         },
-        creditsInfo: { producers, directors, writers, actors },
+        creditsInfo: {
+          producers,
+          directors,
+          writers,
+          actors,
+        },
         specificationsInfo: {
           genres,
           language,
           availableLanguages,
-          runtime,
-          completionDate,
-          rating,
-          projectType,
         },
-        rightsGroups,
-        srtInfo: {
-          srtFiles,
-          infoDocuments,
-        },
+        rightsInfo: {},
+        srtInfo: {},
       };
     }
 
-    // Main loop
+    // --- Main loop ---
     for (let i = 0; i < projects.length; i++) {
       const rawFlatProject = projects[i];
       const raw = transformFlatToNestedProject(rawFlatProject || {});
@@ -398,7 +395,7 @@ bulkCreateProjectForms: async (projects, userId) => {
         projectInfo = {},
         creditsInfo = {},
         specificationsInfo = {},
-        rightsGroups = [],
+        rightsInfo = {},
         srtInfo = {},
       } = raw;
 
@@ -420,38 +417,28 @@ bulkCreateProjectForms: async (projects, userId) => {
       } = projectInfo;
 
       if (!projectTitle) {
-        skippedProjects.push({
-          index: i,
-          reason: "Missing required field: projectTitle",
-        });
+        skippedProjects.push({ index: i, reason: "Missing required field: projectTitle" });
         continue;
       }
 
       const projectName = rawProjectName?.trim() || projectTitle;
 
-      // Coerce isPublic
-      if (typeof isPublic === "boolean") {
-        isPublic = isPublic ? "public" : "private";
-      } else if (
-        typeof isPublic !== "string" ||
-        !["public", "private"].includes(isPublic)
-      ) {
-        isPublic = "private";
+      // ✅ Coerce isPublic into correct string values
+      if (typeof isPublic === 'boolean') {
+        isPublic = isPublic ? 'public' : 'private';
+      } else if (typeof isPublic !== 'string' || !['public', 'private'].includes(isPublic)) {
+        isPublic = 'private';
       }
 
-      // Transform genres as array
+      // ✅ Genres as comma string if array
       const transformedSpecificationsInfo = {
         ...specificationsInfo,
         genres: Array.isArray(specificationsInfo.genres)
-          ? specificationsInfo.genres
-          : [specificationsInfo.genres || ""],
-        completionDate: specificationsInfo.completionDate
-          ? new Date(specificationsInfo.completionDate)
-          : null,
-        runtime: specificationsInfo.runtime || "00:00:00",
+          ? specificationsInfo.genres.join(", ")
+          : specificationsInfo.genres || "",
       };
 
-      // Filter invalid dubbedFileData
+      // ✅ Filter invalid dubbed file entries
       const cleanDubbedFiles = Array.isArray(dubbedFileData)
         ? dubbedFileData
             .filter(
@@ -469,40 +456,13 @@ bulkCreateProjectForms: async (projects, userId) => {
             }))
         : [];
 
-      // --- Create Subdocs ---
+      // ✅ Create subdocs
       const createdCreditsInfo = await CreditsInfoSchema.create(creditsInfo);
-      const createdSpecificationsInfo = await SpecificationsInfo.create(
-        transformedSpecificationsInfo
-      );
+      const createdSpecificationsInfo = await SpecificationsInfo.create(transformedSpecificationsInfo);
+      const createdRightsInfo = await RightsInfoGroup.create(rightsInfo);
+      const createdSrtInfo = await SrtInfoFileSchema.create(srtInfo);
 
-      // ✅ Create Rights Info group
-      const createdRightsInfoGroup = await RightsInfoGroup.create({
-        projectName,
-        userId,
-        rightsGroups: rightsGroups || [],
-      });
-
-      // --- Handle SRT & Info Docs ---
-      const srtFilesArray = Array.isArray(srtInfo.srtFiles)
-        ? srtInfo.srtFiles.map((file) => ({
-            fileName: file.fileName || "",
-            fileUrl: file.fileUrl || "",
-          }))
-        : [];
-
-      const infoDocsArray = Array.isArray(srtInfo.infoDocuments)
-        ? srtInfo.infoDocuments.map((doc) => ({
-            fileName: doc.fileName || "",
-            fileUrl: doc.fileUrl || "",
-          }))
-        : [];
-
-      const createdSrtInfo = await SrtInfoFileSchema.create({
-        srtFiles: srtFilesArray,
-        infoDocuments: infoDocsArray,
-      });
-
-      // --- Create ProjectInfo ---
+      // ✅ Create ProjectInfo
       const createdProjectInfo = await ProjectInfoSchema.create({
         projectTitle,
         projectName,
@@ -521,21 +481,17 @@ bulkCreateProjectForms: async (projects, userId) => {
         dubbedFileData: cleanDubbedFiles,
         creditsInfoId: createdCreditsInfo._id,
         specificationsInfoId: createdSpecificationsInfo._id,
-
-        rightsInfoId: createdRightsInfoGroup._id,
-
-        // ✅ Save SRT/InfoDoc reference
+        rightsInfoId: createdRightsInfo._id,
         srtFilesId: createdSrtInfo._id,
       });
 
       createdProjects.push(createdProjectInfo);
     }
 
-    // --- Summary ---
+    // --- Summary message
     let message;
     if (createdProjects.length === 0 && skippedProjects.length > 0) {
-      message =
-        "❌ All projects were skipped due to missing required fields.";
+      message = "❌ All projects were skipped due to missing required fields.";
     } else if (createdProjects.length > 0 && skippedProjects.length > 0) {
       message = "⚠️ Some projects created, some skipped due to missing fields.";
     } else {
@@ -550,15 +506,9 @@ bulkCreateProjectForms: async (projects, userId) => {
     };
   } catch (error) {
     console.error("❌ Error in bulkCreateProjectForms:", error);
-    throw new Error(
-      "Bulk project creation failed. Please check server logs: " +
-        error.message
-    );
+    throw new Error("Bulk project creation failed. Please check server logs.");
   }
 }
-
-
-
 
 
 
