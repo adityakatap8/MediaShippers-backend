@@ -13,6 +13,7 @@ const projectFormRouter = express.Router();
 // ----------------------
 projectFormRouter.post('/', projectFormController.createProject);
 projectFormRouter.get('/', projectFormController.getAllProjects);
+projectFormRouter.post('/bulkCreateProject', projectFormController.bulkCreateProject);
 
 // ----------------------
 // 📌 Form Data + Nested Info

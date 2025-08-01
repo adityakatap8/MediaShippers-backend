@@ -56,54 +56,100 @@ const modelMap = {
 
 const projectFormDataController = {
   // Fetch project form data
+// getProjectFormData: async (req, res) => {
+//   const { id: projectId } = req.params;
+//   console.log("Project Id from params", projectId)
+
+//   try {
+//     if (!mongoose.Types.ObjectId.isValid(projectId)) {
+//       return res.status(400).json({ error: 'Invalid ID format' });
+//     }
+
+//     const objectId = new mongoose.Types.ObjectId(projectId);
+
+//     // Step 1: Get the project form using projectInfo reference
+//     const projectForm = await ProjectForm.findOne({ projectInfo: objectId });
+
+//     if (!projectForm) {
+//       return res.status(404).json({ error: 'Project form not found' });
+//     }
+
+//     // Step 2: Fetch projectInfo first (we need it to get srtFilesId)
+//     const projectInfo = await ProjectInfo.findById(projectForm.projectInfo);
+
+//     if (!projectInfo) {
+//       return res.status(404).json({ error: 'ProjectInfo not found' });
+//     }
+
+//     // Step 3: Use the srtFilesId from projectInfo to fetch SRT data
+//     const [creditsInfo, specificationsInfo, rightsInfo, srtInfo] = await Promise.all([
+//       CreditsInfo.findById(projectForm.creditsInfo),
+//       SpecificationsInfo.findById(projectForm.specificationsInfo),
+//       RightsInfoGroup.findById(projectForm.rightsInfo?.[0]),
+//       SrtInfoFileSet.findById(projectInfo.srtFilesId), // ✅ correct reference
+//     ]);
+
+//     const responseData = {
+//       ...projectForm.toObject(),
+//       projectInfo,
+//       creditsInfo,
+//       specificationsInfo,
+//       rightsInfo,
+//       srtInfo, // ✅ rename back to srtInfo for clarity
+//     };
+
+//     res.json(responseData);
+//   } catch (error) {
+//     console.error('Error fetching project data:', error.message);
+//     res.status(500).json({ error: 'Internal server error' });
+//   }
+// }
 getProjectFormData: async (req, res) => {
   const { id: projectId } = req.params;
 
   try {
     if (!mongoose.Types.ObjectId.isValid(projectId)) {
-      return res.status(400).json({ error: 'Invalid ID format' });
+      return res.status(400).json({ error: 'Invalid project ID format' });
     }
 
     const objectId = new mongoose.Types.ObjectId(projectId);
 
-    // Step 1: Get the project form using projectInfo reference
-    const projectForm = await ProjectForm.findOne({ projectInfo: objectId });
-
-    if (!projectForm) {
-      return res.status(404).json({ error: 'Project form not found' });
-    }
-
-    // Step 2: Fetch projectInfo first (we need it to get srtFilesId)
-    const projectInfo = await ProjectInfo.findById(projectForm.projectInfo);
-
+    // Fetch the main project document
+    const projectInfo = await ProjectInfo.findById(objectId);
     if (!projectInfo) {
       return res.status(404).json({ error: 'ProjectInfo not found' });
     }
 
-    // Step 3: Use the srtFilesId from projectInfo to fetch SRT data
+    // Destructure sub-document IDs
+    const {
+      creditsInfoId,
+      specificationsInfoId,
+      rightsInfoId,
+      srtFilesId,
+    } = projectInfo;
+
+    // Fetch sub-documents in parallel
     const [creditsInfo, specificationsInfo, rightsInfo, srtInfo] = await Promise.all([
-      CreditsInfo.findById(projectForm.creditsInfo),
-      SpecificationsInfo.findById(projectForm.specificationsInfo),
-      RightsInfoGroup.findById(projectForm.rightsInfo?.[0]),
-      SrtInfoFileSet.findById(projectInfo.srtFilesId), // ✅ correct reference
+      CreditsInfo.findById(creditsInfoId),
+      SpecificationsInfo.findById(specificationsInfoId),
+      RightsInfoGroup.findById(rightsInfoId),
+      SrtInfoFileSet.findById(srtFilesId),
     ]);
 
-    const responseData = {
-      ...projectForm.toObject(),
+    // Respond with fully populated project data
+    return res.status(200).json({
       projectInfo,
       creditsInfo,
       specificationsInfo,
       rightsInfo,
-      srtInfo, // ✅ rename back to srtInfo for clarity
-    };
+      srtInfo,
+    });
 
-    res.json(responseData);
   } catch (error) {
-    console.error('Error fetching project data:', error.message);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error('❌ Error in getProjectFormData:', error);
+    return res.status(500).json({ error: 'Internal server error', details: error.message });
   }
 }
-
 
 ,
 

@@ -5,12 +5,12 @@ const specificationsInfoSchema = new mongoose.Schema({
     type: String,
   },
   genres: {
-    type: String,
-    default: '',  
+    type: [String], 
+    default: [],
   },
- runtime: {
-  type: String
-},
+  runtime: {
+    type: String
+  },
   completionDate: {
     type: Date,
   },
@@ -55,7 +55,18 @@ const specificationsInfoSchema = new mongoose.Schema({
   },
   rating: {
     type: String,
+  },
+
+ 
+  seasonNumber: {
+    type: Number,
+
+  },
+  numberOfEpisodes: {
+    type: Number,
+  
   }
+
 }, { timestamps: true });
 
 const SpecificationsInfo = mongoose.model('SpecificationsInfo', specificationsInfoSchema);

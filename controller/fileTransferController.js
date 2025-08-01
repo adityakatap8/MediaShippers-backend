@@ -1,111 +1,66 @@
-// filesTransferController.js
-
-import { transferFilesBetweenBuckets } from '../services/s3Service.js'; // Import the file transfer service
-
-// Controller to handle file transfer between S3 buckets
 // controllers/transferFileController.js
-
 import dotenv from 'dotenv';
-
+import ProjectInfo from '../models/projectFormModels/FormModels/ProjectInfoSchema.js';
+import { transferFilesBetweenBuckets } from '../services/s3Service.js';
 
 dotenv.config();
 
 export const transferFileController = async (req, res) => {
   const {
-    projectPosterUrl,
-    projectBannerUrl,
-    trailerUrl,
-    movieUrl,
-    orgName,
-    projectFolder,
-    dubbedFiles = [],
-    srtFiles = [],
-    infoDocs = [],
-    projectPosterS3Url,
-    projectBannerS3Url,
-    projectTrailerS3Url,
-    projectMovieS3Url,
+    orgName, projectFolder,
+    posterFileUrl, bannerFileUrl,
+    trailerUrl, movieUrl,
+    infoDocs = [], srtFiles = [], dubbedFiles = []
   } = req.body;
 
-  const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
-  const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
-
-  if (!orgName || !projectFolder || !accessKeyId || !secretAccessKey) {
-    return res.status(400).json({
-      error: 'Organization name, project folder, and AWS credentials are required.',
-    });
+  if (!orgName || !projectFolder) {
+    return res.status(400).json({ error: 'Missing orgName or projectFolder' });
   }
 
-  const errors = [];
-  const transferredDubbedFiles = [];
-  const transferredSrtFiles = [];
-  const transferredInfoDocs = [];
+  const result = {
+    posterFileUrl: '', bannerFileUrl: '',
+    trailerFileUrl: '', movieFileUrl: '',
+    infoDocs: [], srtFiles: [], dubbedFiles: [], errors: []
+  };
 
-  try {
-    const transferData = [
-      {
-        fileType: 'poster',
-        sourceUrl: projectPosterUrl,
-        destinationUrl: projectPosterS3Url,
-      },
-      {
-        fileType: 'banner',
-        sourceUrl: projectBannerUrl,
-        destinationUrl: projectBannerS3Url,
-      },
-      {
-        fileType: 'trailer',
-        sourceUrl: trailerUrl,
-        destinationUrl: projectTrailerS3Url,
-      },
-      {
-        fileType: 'movie',
-        sourceUrl: movieUrl,
-        destinationUrl: projectMovieS3Url,
-      },
-    ];
-console.log("inside file transfer controller 1")
-    for (let file of transferData) {
-     
-      if (file.sourceUrl && file.destinationUrl) {
-        console.log("inside file transfer controller 3")
-        try {
-          const result = await transferFilesBetweenBuckets(
-            file.sourceUrl,
-            file.destinationUrl,
-            accessKeyId,
-            secretAccessKey,
-            file.fileType
-          );
-          console.log(`✅ Transferred ${file.fileType}: ${result.url}`);
-        } catch (err) {
-          console.error(`❌ Error transferring ${file.fileType}:`, err.message);
-          errors.push({ fileType: file.fileType, error: err.message });
-        }
+  const tasks = [
+    { label: 'poster', source: posterFileUrl, dest: req.body.projectPosterS3Url },
+    { label: 'banner', source: bannerFileUrl, dest: req.body.projectBannerS3Url },
+    { label: 'trailer', source: trailerUrl, dest: req.body.projectTrailerS3Url },
+    { label: 'movie', source: movieUrl, dest: req.body.projectMovieS3Url }
+  ];
+
+  for (let t of tasks) {
+    if (t.source && t.dest) {
+      try {
+        const { url } = await transferFilesBetweenBuckets(t.source, t.dest, t.label);
+        result[`${t.label}FileUrl`] = url;
+      } catch (err) {
+        console.error(`Error copying ${t.label}:`, err.message);
+        result.errors.push({ fileType: t.label, error: err.message });
       }
     }
-
-    // (Dubbed, SRT, and InfoDocs transfer logic stays the same — just make sure to pass both source & destination in those too)
-
-    const success = errors.length === 0;
-
-    return res.status(success ? 200 : 207).json({
-      success,
-      message: success
-        ? 'All file transfers completed successfully.'
-        : 'Some files failed to transfer.',
-      errors,
-    });
-  } catch (error) {
-    console.error('❌ Fatal error during file transfer:', error);
-    return res.status(500).json({
-      success: false,
-      error: error.message || 'Internal server error.',
-    });
   }
+
+  // You can implement similar loop for infoDocs, srtFiles, dubbedFiles
+  // (loop through arrays and each get a URL from transferFilesBetweenBuckets)
+
+  // Save updated URLs to MongoDB
+  const updates = {};
+  ['poster', 'banner', 'trailer', 'movie'].forEach((t) => {
+    const key = `${t}FileUrl`;
+    if (result[key]) {
+      updates[`project${t.charAt(0).toUpperCase() + t.slice(1)}S3Url`] = result[key];
+      updates[`${t}FileName`] = result[key].split('/').pop();
+    }
+  });
+  if (Object.keys(updates).length) {
+    await ProjectInfo.findOneAndUpdate({ projectName: projectFolder }, { $set: updates });
+  }
+
+  return res.status(result.errors.length ? 207 : 200).json({
+    success: result.errors.length === 0,
+    message: result.errors.length ? 'Partial failures' : 'All files transferred',
+    ...result
+  });
 };
-
-
-
-
-

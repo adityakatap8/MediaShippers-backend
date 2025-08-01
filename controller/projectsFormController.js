@@ -8,93 +8,82 @@ const projectFormController = {
   },
 
   // Create a new project form combined components info is shared using this code
+  // project forms create project controller
+  createProject: async (req, res) => {
+    console.log("🟢 Inside createProject controller ====>");
 
-createProject: async (req, res) => {
-  console.log("🟢 Inside createProject controller ====>");
+    try {
+      let {
+        projectInfo,
+        creditsInfo,
+        specificationsInfo,
+        rightsInfo,
+        userId,
+      } = req.body;
 
-  try {
-    let {
-      projectInfo,
-      creditsInfo,
-      specificationsInfo,
-      rightsInfo,
-      userId,
-    } = req.body;
+      // Parse potentially stringified fields from multipart/form-data
+      let srtInfo = typeof req.body.srtInfo === 'string' ? JSON.parse(req.body.srtInfo) : req.body.srtInfo;
+      let dubbedFiles = typeof req.body.dubbedFiles === 'string' ? JSON.parse(req.body.dubbedFiles) : req.body.dubbedFiles;
 
-    // Parse potentially stringified fields from multipart/form-data
-    let srtInfo = typeof req.body.srtInfo === 'string' ? JSON.parse(req.body.srtInfo) : req.body.srtInfo;
-    let dubbedFiles = typeof req.body.dubbedFiles === 'string' ? JSON.parse(req.body.dubbedFiles) : req.body.dubbedFiles;
+      console.log("📜 Received projectInfo:", JSON.stringify(projectInfo ?? {}, null, 2));
+      console.log("📜 Received creditsInfo:", JSON.stringify(creditsInfo ?? {}, null, 2));
+      console.log("📜 Received specificationsInfo:", JSON.stringify(specificationsInfo ?? {}, null, 2));
+      console.log("📜 Received rightsInfo:", JSON.stringify(rightsInfo ?? {}, null, 2));
+      console.log("📜 Received srtInfo:", JSON.stringify(srtInfo ?? {}, null, 2));
+      console.log("🎧 Received dubbedFiles:", JSON.stringify(dubbedFiles ?? {}, null, 2));
 
-    console.log("📜 Received projectInfo:", JSON.stringify(projectInfo ?? {}, null, 2));
-    console.log("📜 Received creditsInfo:", JSON.stringify(creditsInfo ?? {}, null, 2));
-    console.log("📜 Received specificationsInfo:", JSON.stringify(specificationsInfo ?? {}, null, 2));
-    console.log("📜 Received rightsInfo:", JSON.stringify(rightsInfo ?? {}, null, 2));
-    console.log("📜 Received srtInfo:", JSON.stringify(srtInfo ?? {}, null, 2));
-    console.log("🎧 Received dubbedFiles:", JSON.stringify(dubbedFiles ?? {}, null, 2));
+      // ✅ Normalize srtInfo
+      let srtPayload = {};
+      if (srtInfo?.srtFiles || srtInfo?.infoDocuments) {
+        srtPayload = srtInfo;
+      } else if (srtInfo?.srtInfo) {
+        srtPayload = srtInfo.srtInfo;
+      } else {
+        console.warn("⚠️ No srtInfo provided. Proceeding with empty payload.");
+        srtPayload = { srtFiles: [], infoDocuments: [] };
+      }
 
-    // ✅ Normalize srtInfo
-    let srtPayload = {};
-    if (srtInfo?.srtFiles || srtInfo?.infoDocuments) {
-      srtPayload = srtInfo;
-    } else if (srtInfo?.srtInfo) {
-      srtPayload = srtInfo.srtInfo;
-    } else {
-      console.warn("⚠️ No srtInfo provided. Proceeding with empty payload.");
-      srtPayload = { srtFiles: [], infoDocuments: [] };
+      // Defensive checks
+      if (!Array.isArray(srtPayload.srtFiles)) srtPayload.srtFiles = [];
+      if (!Array.isArray(srtPayload.infoDocuments)) srtPayload.infoDocuments = [];
+
+      // ✅ Normalize dubbedFiles
+      const normalizedDubbedFiles = Array.isArray(dubbedFiles?.dubbedFiles)
+        ? dubbedFiles.dubbedFiles
+        : Array.isArray(dubbedFiles)
+          ? dubbedFiles
+          : [];
+
+      console.log("🧪 Normalized srtPayload:", JSON.stringify(srtPayload ?? {}, null, 2));
+      console.log("🧪 Normalized dubbedFiles:", JSON.stringify(normalizedDubbedFiles ?? [], null, 2));
+
+      // ✅ Basic validation
+      if (!projectInfo || !projectInfo.projectTitle) {
+        return res.status(400).json({ error: "Project Title is required" });
+      }
+
+      // ✅ Delegate to service
+      const newProjectForm = await ProjectFormService.createProjectForm(
+        projectInfo,
+        creditsInfo,
+        specificationsInfo,
+        rightsInfo,
+        srtPayload,
+        normalizedDubbedFiles,
+        userId
+      );
+
+      return res.status(201).json({
+        message: "✅ Project form created successfully",
+        project: newProjectForm,
+      });
+    } catch (error) {
+      console.error("❌ Error creating project:", error);
+      return res.status(500).json({ error: "Internal server error", details: error.message });
     }
-
-    // Defensive checks
-    if (!Array.isArray(srtPayload.srtFiles)) srtPayload.srtFiles = [];
-    if (!Array.isArray(srtPayload.infoDocuments)) srtPayload.infoDocuments = [];
-
-    // ✅ Normalize dubbedFiles
-    const normalizedDubbedFiles = Array.isArray(dubbedFiles?.dubbedFiles)
-      ? dubbedFiles.dubbedFiles
-      : Array.isArray(dubbedFiles)
-        ? dubbedFiles
-        : [];
-
-    console.log("🧪 Normalized srtPayload:", JSON.stringify(srtPayload ?? {}, null, 2));
-    console.log("🧪 Normalized dubbedFiles:", JSON.stringify(normalizedDubbedFiles ?? [], null, 2));
-
-    // ✅ Basic validation
-    if (!projectInfo || !projectInfo.projectTitle) {
-      return res.status(400).json({ error: "Project Title is required" });
-    }
-
-    // ✅ Delegate to service
-    const newProjectForm = await ProjectFormService.createProjectForm(
-      projectInfo,
-      creditsInfo,
-      specificationsInfo,
-      rightsInfo,
-      srtPayload,
-      normalizedDubbedFiles,
-      userId
-    );
-
-    return res.status(201).json({
-      message: "✅ Project form created successfully",
-      project: newProjectForm,
-    });
-  } catch (error) {
-    console.error("❌ Error creating project:", error);
-    return res.status(500).json({ error: "Internal server error", details: error.message });
   }
-}
-,
+  ,
 
-
-
-
-
-  
-  
-  
-  
-  
-  
-  
 
   // Get all project forms
   getAllProjects: async (req, res) => {
@@ -127,6 +116,34 @@ createProject: async (req, res) => {
       res.status(500).json({ error: "Internal server error" });
     }
   },
+
+  // bulk upload controller
+// bulk upload controller
+// controllers/projectFormController.js
+bulkCreateProject: async (req, res) => {
+  try {
+    const { userId, projects } = req.body;
+
+    if (!userId || typeof userId !== 'string' || !Array.isArray(projects)) {
+      return res.status(400).json({ error: 'Missing or invalid userId or projects array.' });
+    }
+
+    const result = await ProjectFormService.bulkCreateProjectForms(projects, userId);
+
+    return res.status(201).json({
+      message: result.message,
+      count: result.count,
+      projects: result.projects,
+      skipped: result.skipped,
+    });
+  } catch (error) {
+    console.error("❌ Error in bulkCreateProject:", error);
+    res.status(500).json({ error: "Internal server error", details: error.message });
+  }
+}
+  ,
+
+
 
   // Get a project form by ID
   getProjectById: async (req, res) => {

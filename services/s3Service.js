@@ -385,68 +385,114 @@ const convertS3UriToHttpUrl = (s3Uri) => {
   return `https://${bucket}.s3.amazonaws.com/${encodeURIComponent(key)}`;
 };
 
+// services/s3Service.js
 
+export const transferFilesBetweenBuckets = async (sourceUrl, destinationUrl, fileType) => {
+  const { AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION } = process.env;
+  if (!AWS_ACCESS_KEY_ID || !AWS_SECRET_ACCESS_KEY) {
+    throw new Error('Missing AWS credentials');
+  }
 
+  const s3 = new AWS.S3({
+    accessKeyId: AWS_ACCESS_KEY_ID,
+    secretAccessKey: AWS_SECRET_ACCESS_KEY,
+    region: AWS_REGION
+  });
 
-
-
-export const transferFilesBetweenBuckets = async (
-  sourceUrl,
-  destinationUrl,
-  accessKeyId,
-  secretAccessKey,
-  fileType
-) => {
-  const s3 = new AWS.S3({ accessKeyId, secretAccessKey });
-  console.log("inside services for file transfer")
-
-  const parseS3Url = (s3Url) => {
-    if (s3Url.startsWith('s3://')) {
-      const urlWithoutProtocol = s3Url.slice(5);
-      const [bucket, ...keyParts] = urlWithoutProtocol.split('/');
+  const parseS3 = (url) => {
+    if (url.startsWith('s3://')) {
+      const [bucket, ...keyParts] = url.slice(5).split('/');
       return { bucket, key: keyParts.join('/') };
-    } else if (s3Url.startsWith('https://')) {
-      const url = new URL(s3Url);
-      const [bucket] = url.hostname.split('.');
-      return { bucket, key: decodeURIComponent(url.pathname.slice(1)) };
+    } else {
+      const { hostname, pathname } = new URL(url);
+      const bucket = hostname.split('.')[0];
+      return { bucket, key: decodeURIComponent(pathname.slice(1)) };
     }
-    throw new Error(`Unsupported URL format: ${s3Url}`);
   };
 
+  const { bucket: srcBuc, key: srcKey } = parseS3(sourceUrl);
+  const { bucket: dstBuc, key: dstKey } = parseS3(destinationUrl);
+
   try {
-    const { bucket: srcBucket, key: srcKey } = parseS3Url(sourceUrl);
-    const { bucket: destBucket, key: destKey } = parseS3Url(destinationUrl);
-
-    console.log(`[${fileType}] Starting transfer from: s3://${srcBucket}/${srcKey}`);
-    console.log(`[${fileType}] Destination: s3://${destBucket}/${destKey}`);
-
-    // Check if source object exists
-    try {
-      await s3.headObject({ Bucket: srcBucket, Key: srcKey }).promise();
-      console.log(`[${fileType}] Verified source object exists.`);
-    } catch (headErr) {
-      throw new Error(`Source object does not exist at s3://${srcBucket}/${srcKey}: ${headErr.message}`);
-    }
-
-    // Copy object
-    try {
-      await s3.copyObject({
-        Bucket: destBucket,
-        Key: destKey,
-        CopySource: encodeURIComponent(`${srcBucket}/${srcKey}`), // must be URL-encoded
-        ACL: 'private', // or your desired ACL
-      }).promise();
-
-      console.log(`[${fileType}] Successfully copied to s3://${destBucket}/${destKey}`);
-      return { url: `https://${destBucket}.s3.amazonaws.com/${destKey}` };
-    } catch (copyErr) {
-      throw new Error(`Failed to copy ${fileType} from s3://${srcBucket}/${srcKey} to s3://${destBucket}/${destKey}: ${copyErr.message}`);
-    }
+    await s3.headObject({ Bucket: srcBuc, Key: srcKey }).promise();
   } catch (err) {
-    console.error(`[${fileType}] Transfer error: ${err.message}`);
-    throw err; // re-throw to be handled by caller
+    throw new Error(`Source file not found: ${srcBuc}/${srcKey}`);
   }
+
+  try {
+    await s3.copyObject({
+      Bucket: dstBuc,
+      Key: dstKey,
+      CopySource: encodeURIComponent(`${srcBuc}/${srcKey}`), // critical!
+      ACL: 'private'
+    }).promise();
+  } catch (err) {
+    throw new Error(`Copy failed: ${err.message}`);
+  }
+
+  return {
+    url: `https://${dstBuc}.s3.${AWS_REGION}.amazonaws.com/${dstKey}`
+  };
 };
+
+
+
+
+
+// export const transferFilesBetweenBuckets = async (
+//   sourceUrl,
+//   destinationUrl,
+//   accessKeyId,
+//   secretAccessKey,
+//   fileType
+// ) => {
+//   const s3 = new AWS.S3({ accessKeyId, secretAccessKey });
+//   console.log("📦 Inside service for file transfer");
+
+//   const parseS3Url = (s3Url) => {
+//     if (s3Url.startsWith('s3://')) {
+//       const urlWithoutProtocol = s3Url.slice(5);
+//       const [bucket, ...keyParts] = urlWithoutProtocol.split('/');
+//       return { bucket, key: keyParts.join('/') };
+//     } else if (s3Url.startsWith('https://')) {
+//       const url = new URL(s3Url);
+//       const [bucket] = url.hostname.split('.');
+//       return { bucket, key: decodeURIComponent(url.pathname.slice(1)) };
+//     }
+//     throw new Error(`Unsupported URL format: ${s3Url}`);
+//   };
+
+//   const { bucket: srcBucket, key: srcKey } = parseS3Url(sourceUrl);
+//   const { bucket: destBucket, key: destKey } = parseS3Url(destinationUrl);
+
+//   console.log(`[${fileType}] Copying from: s3://${srcBucket}/${srcKey}`);
+//   console.log(`[${fileType}] To destination: s3://${destBucket}/${destKey}`);
+
+//   try {
+//     // Check source exists
+//     await s3.headObject({ Bucket: srcBucket, Key: srcKey }).promise();
+//     console.log(`[${fileType}] ✅ Source file exists.`);
+
+//     // Copy object
+//     await s3.copyObject({
+//       Bucket: destBucket,
+//       Key: destKey,
+//       CopySource: `${srcBucket}/${srcKey}`, // ✅ DO NOT ENCODE
+//       ACL: 'private',
+//     }).promise();
+
+//     console.log(`[${fileType}] ✅ Copy successful.`);
+//     return {
+//       url: `https://${destBucket}.s3.amazonaws.com/${encodeURIComponent(destKey).replace(/%2F/g, '/')}`,
+//     };
+//   } catch (err) {
+//     console.error(`[${fileType}] ❌ Error during copy:`, err.message);
+//     throw err;
+//   }
+// };
+
+
+
 
 // Deletes a file from S3 using its full URL
 export const deleteFileFromUrl = async (fileUrl) => {
