@@ -24,8 +24,7 @@ const dealSchema = new mongoose.Schema({
         required: true
     },
     usageRights: {
-        type: String, 
-        required: true
+        type: String
     },
     includingRegions: {
         type: [String], // e.g., ['Asia', 'India']
@@ -67,6 +66,7 @@ const dealSchema = new mongoose.Schema({
     status: {
         type: String,
         enum: [
+            'pending',
             'submitted_by_buyer',
             'admin_filtered_content',
             'curated_list_sent_to_buyer',

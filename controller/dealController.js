@@ -20,10 +20,9 @@ export const createDealWithMessage = async (req, res) => {
   } = req.body;
 
   try {
-    // Create the deal
-    const deal = new Deal({
+
+    const dealData = {
       senderId,
-      assignedTo: receiverId,
       requirementTitle: `${contentCategory} in ${languages?.join(', ')} (${genre}, ${yearOfRelease}) for ${includingRegions?.join(', ')}`,
       rights,
       usageRights,
@@ -34,7 +33,15 @@ export const createDealWithMessage = async (req, res) => {
       genre,
       yearOfRelease,
       status,
-    });
+    };
+    
+    // Assign only if receiverId is not an empty string
+    if (receiverId && receiverId.trim() !== "") {
+      dealData.assignedTo = receiverId;
+    }
+    
+    // Create the deal
+    const deal = new Deal(dealData);
 
 
     const savedDeal = await deal.save();
@@ -300,7 +307,7 @@ export const getDealsWithCounts = async (req, res) => {
         deal.status
       )
     ).length;
-    const shared = deals.filter((deal) => deal.senderId.toString() === id).length;
+    const shared = deals.filter((deal) => deal.senderId.toString() === id && deal.status !== "pending").length;
     const received = deals.filter(
       (deal) => deal.assignedTo?.toString() === id
     ).length;
@@ -522,6 +529,7 @@ export const splitDealToSellers = async (req, res) => {
     const sellerMap = {};
     movieDetails.forEach((movie) => {
       const sellerId = movie.userId?.toString();
+      console.log('Processing movie for seller:', movie, 'Seller ID:', sellerId);
       if (!sellerId) return;
 
       if (!sellerMap[sellerId]) {
@@ -554,6 +562,7 @@ export const splitDealToSellers = async (req, res) => {
       });
 
       const savedDeal = await newDeal.save();
+      console.log('Created deal for seller:', savedDeal);
       createdDeals.push(savedDeal);
     }
 
@@ -631,6 +640,10 @@ export const updateDealWithMessageAndRemoveFromCart = async (req, res) => {
     const deal = await Deal.findById(dealId);
     if (!deal) {
       return res.status(404).json({ message: 'Deal not found' });
+    }
+
+    if (!deal.assignedTo || deal.assignedTo === "") {
+      deal.assignedTo = message.reciverId;
     }
 
     // 2. Update the deal with new details
