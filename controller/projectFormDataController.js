@@ -492,8 +492,15 @@ deleteFileMetadata: async (req, res) => {
 
       const populatedProjects = await Promise.all(
         projects.map(async project => {
-          const form = projectForms.find(f => f.projectInfo.toString() === project._id.toString()) || {};
-          console.log("form", form);
+          const form = projectForms.find(f => f.projectInfo.toString() === project._id.toString());
+      
+          if (!form) {
+            return {
+              ...project.toObject(),
+              formData: null
+            };
+          }
+      
           const populatedForm = {
             ...form.toObject(),
             specificationsInfo: form.specificationsInfo
@@ -509,13 +516,14 @@ deleteFileMetadata: async (req, res) => {
               ? await ScreeningsInfo.find({ _id: { $in: form.screeningsInfo } })
               : [],
           };
-
+      
           return {
             ...project.toObject(),
             formData: populatedForm,
           };
         })
       );
+      
 
       res.json({
         message: 'Projects, forms, and related data combined successfully',
