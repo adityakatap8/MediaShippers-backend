@@ -1,5 +1,5 @@
 import express from 'express';
-import { addMessageAndUpdateStatus, createDealWithMessage, getDealById, getDealsWithCounts, getUnreadMessageCount, markMessagesAsRead, getMessageHistory, splitDealToSellers, sellerActionOnMovies, updateDealWithMessageAndRemoveFromCart } from '../controller/dealController.js';
+import { addMessageAndUpdateStatus, createDealWithMessage, getDealById, getDealsWithCounts, getUnreadMessageCount, markMessagesAsRead, getMessageHistory, splitDealToSellers, sellerActionOnMovies, updateDealWithMessageAndRemoveFromCart, updateDealOrRequirement, deleteDealOrRequirement } from '../controller/dealController.js';
 
 const router = express.Router();
 
@@ -26,5 +26,9 @@ router.get('/:dealId/message-history', getMessageHistory);
 router.post('/split-to-sellers', splitDealToSellers);
 
 router.patch('/:dealId/action', sellerActionOnMovies);
+
+router.put('/updateDealOrRequirement/:dealId', updateDealOrRequirement);
+
+router.delete('/deleteDealOrRequirement/:dealId', deleteDealOrRequirement);
 
 export default router;

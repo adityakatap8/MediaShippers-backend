@@ -34,12 +34,12 @@ export const createDealWithMessage = async (req, res) => {
       yearOfRelease,
       status,
     };
-    
+
     // Assign only if receiverId is not an empty string
     if (receiverId && receiverId.trim() !== "") {
       dealData.assignedTo = receiverId;
     }
-    
+
     // Create the deal
     const deal = new Deal(dealData);
 
@@ -47,12 +47,12 @@ export const createDealWithMessage = async (req, res) => {
     const savedDeal = await deal.save();
     await savedDeal.save();
 
-    
+
 
     res.status(201).json({
       message: 'Deal created successfully',
       deal: savedDeal,
-     });
+    });
   } catch (error) {
     console.error('Error creating deal and message:', error);
     res.status(500).json({ error: 'Failed to create deal and message' });
@@ -714,4 +714,64 @@ export const updateDealWithMessageAndRemoveFromCart = async (req, res) => {
     res.status(500).json({ error: 'Failed to update deal and remove from cart' });
   }
 };
+
+
+export const updateDealOrRequirement = async (req, res) => {
+  try {
+    const { dealId } = req.params;
+    const updateData = req.body;
+
+    const deal = await Deal.findById(dealId);
+
+    if (!deal) {
+      return res.status(404).json({ message: 'Deal not found' });
+    }
+
+    // Check if deal status is pending/submitted_by_buyer
+    if (deal.status !== 'pending' && deal.status !== 'submitted_by_buyer') {
+      return res.status(400).json({ message: 'Cannot update deal unless status is pending' });
+    }
+
+    // Update the fields dynamically
+    Object.keys(updateData).forEach((key) => {
+      deal[key] = updateData[key];
+    });
+
+    deal.updatedAt = Date.now();
+
+    await deal.save();
+
+    return res.status(200).json({ message: 'Deal updated successfully', deal });
+  } catch (error) {
+    console.error('Error updating deal:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+
+export const deleteDealOrRequirement = async (req, res) => {
+  try {
+    const { dealId } = req.params;
+
+    const deal = await Deal.findById(dealId);
+
+    if (!deal) {
+      return res.status(404).json({ message: 'Deal not found' });
+    }
+
+    // Check if deal status is pending/submitted_by_buyer
+    if (deal.status !== 'pending' && deal.status !== 'submitted_by_buyer') {
+      return res.status(400).json({ message: 'Cannot delete deal unless status is pending' });
+    }
+
+    await Deal.findByIdAndDelete(dealId);
+
+    return res.status(200).json({ message: 'Deal deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting deal:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+
 
