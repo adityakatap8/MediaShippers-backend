@@ -521,9 +521,15 @@ const projectFormDataController = {
       const filterConditions = [];
 
       // RIGHTS
+      // ...existing code...
+      // RIGHTS
       if (rights) {
-        const rightsLower = rights.toLowerCase();
-        if (rightsLower === "all rights") {
+        // Normalize rights to array of lowercase strings
+        const rightsArr = Array.isArray(rights)
+          ? rights.map(r => r.toLowerCase())
+          : [rights.toLowerCase()];
+
+        if (rightsArr.length === 1 && rightsArr[0] === "all rights") {
           filterConditions.push({
             $expr: {
               $gt: [
@@ -563,7 +569,7 @@ const projectFormDataController = {
                       as: "right",
                       cond: {
                         $or: [
-                          { $eq: [{ $toLower: "$$right.name" }, rightsLower] },
+                          { $in: [{ $toLower: "$$right.name" }, rightsArr] },
                           { $eq: [{ $toLower: "$$right.name" }, "all rights"] }
                         ]
                       }
@@ -576,6 +582,7 @@ const projectFormDataController = {
           });
         }
       }
+      // ...existing code...
 
 
       // INCLUDING REGIONS
@@ -645,14 +652,14 @@ const projectFormDataController = {
       // LANGUAGE
       if (languages) {
         const langArr = Array.isArray(languages) ? languages : languages.split(',');
-    
+
         filterConditions.push({
-            "formData.specificationsInfo.language": {
-                $in: langArr.map(l => new RegExp(`^${l}$`, 'i')) // case-insensitive match
-            }
+          "formData.specificationsInfo.language": {
+            $in: langArr.map(l => new RegExp(`^${l}$`, 'i')) // case-insensitive match
+          }
         });
-    }
-    
+      }
+
 
       // GENRE
       if (genre) {

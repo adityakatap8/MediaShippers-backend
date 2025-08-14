@@ -21,7 +21,6 @@ const dealSchema = new mongoose.Schema({
     movies: [movieStatusSchema],
     rights: {
         type: String, 
-        required: true
     },
     usageRights: {
         type: String
@@ -35,8 +34,7 @@ const dealSchema = new mongoose.Schema({
         default: []
     },
     contentCategory: {
-        type: [String], // e.g., 'Movie', 'Web Series'
-        required: true
+        type: [String], 
     },
     languages: {
         type: [String], // e.g., ['Hindi', 'English']
