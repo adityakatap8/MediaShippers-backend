@@ -181,23 +181,51 @@ router.delete('/delete-file', async (req, res) => {
 
 
 // DELETE a folder and all contents from S3
+// router.delete('/delete-folder', async (req, res) => {
+//   try {
+//     // Folder path should come in request body (as JSON)
+//     const { folderPath } = req.body;
+
+//     if (!folderPath) {
+//       return res.status(400).json({ message: 'Missing folderPath in request body' });
+//     }
+
+//     await deleteFolder(folderPath);
+
+//     res.status(200).json({ message: `Folder "${folderPath}" deleted successfully` });
+//   } catch (error) {
+//     console.error('❌ Error deleting folder:', error);
+//     res.status(500).json({ error: error.message });
+//   }
+// });
+
+
 router.delete('/delete-folder', async (req, res) => {
   try {
-    // Folder path should come in request body (as JSON)
     const { folderPath } = req.body;
 
     if (!folderPath) {
-      return res.status(400).json({ message: 'Missing folderPath in request body' });
+      return res.status(400).json({ success: false, message: 'Missing folderPath in request body' });
     }
 
-    await deleteFolder(folderPath);
+    console.log("🗂️ Deleting S3 folder:", folderPath);
 
-    res.status(200).json({ message: `Folder "${folderPath}" deleted successfully` });
+    const result = await deleteFolder(folderPath);
+
+    return res.status(200).json(result); // success response
+
   } catch (error) {
     console.error('❌ Error deleting folder:', error);
-    res.status(500).json({ error: error.message });
+
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to delete folder from S3',
+      error: error.message || 'Unknown error',
+    });
   }
 });
+
+
 
 
 

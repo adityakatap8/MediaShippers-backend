@@ -12,170 +12,170 @@ import SrtInfoFileSchema from "../models/projectFormModels/FormModels/SrtInfoFil
 const projectFormService = {
 
 
-createProjectForm: async (
-  projectInfo,
-  creditsInfo,
-  specificationsInfo,
-  rightsInfo,
-  srtInfo,
-  dubbedFiles,
-  userId
-) => {
-  try {
-    const cleanUserId =
-      typeof userId === "string" && userId.trim()
-        ? userId.trim()
-        : projectInfo?.userId?.trim?.() || "";
+  createProjectForm: async (
+    projectInfo,
+    creditsInfo,
+    specificationsInfo,
+    rightsInfo,
+    srtInfo,
+    dubbedFiles,
+    userId
+  ) => {
+    try {
+      const cleanUserId =
+        typeof userId === "string" && userId.trim()
+          ? userId.trim()
+          : projectInfo?.userId?.trim?.() || "";
 
-    if (!cleanUserId) throw new Error("userId is missing or invalid.");
+      if (!cleanUserId) throw new Error("userId is missing or invalid.");
 
-    const normalizeFileName = (file) => {
-      if (file && typeof file === "object" && file.fileName) return file.fileName;
-      if (typeof file === "string") return file;
-      return "";
-    };
+      const normalizeFileName = (file) => {
+        if (file && typeof file === "object" && file.fileName) return file.fileName;
+        if (typeof file === "string") return file;
+        return "";
+      };
 
-    if (
-      projectInfo.s3SourceTrailerUrl &&
-      typeof projectInfo.s3SourceTrailerUrl === "object" &&
-      projectInfo.s3SourceTrailerUrl.fileUrl
-    ) {
-      projectInfo.s3SourceTrailerUrl = projectInfo.s3SourceTrailerUrl.fileUrl;
-    }
+      if (
+        projectInfo.s3SourceTrailerUrl &&
+        typeof projectInfo.s3SourceTrailerUrl === "object" &&
+        projectInfo.s3SourceTrailerUrl.fileUrl
+      ) {
+        projectInfo.s3SourceTrailerUrl = projectInfo.s3SourceTrailerUrl.fileUrl;
+      }
 
-    const projectData = {
-      ...projectInfo,
-      userId: cleanUserId,
-      posterFileName: normalizeFileName(projectInfo.posterFileName),
-      bannerFileName: normalizeFileName(projectInfo.bannerFileName),
-      trailerFileName: normalizeFileName(projectInfo.trailerFileName),
-      movieFileName: normalizeFileName(projectInfo.movieFileName),
-    };
+      const projectData = {
+        ...projectInfo,
+        userId: cleanUserId,
+        posterFileName: normalizeFileName(projectInfo.posterFileName),
+        bannerFileName: normalizeFileName(projectInfo.bannerFileName),
+        trailerFileName: normalizeFileName(projectInfo.trailerFileName),
+        movieFileName: normalizeFileName(projectInfo.movieFileName),
+      };
 
-    if (Array.isArray(dubbedFiles) && dubbedFiles.length > 0) {
-      projectData.dubbedFileData = dubbedFiles.map((file) => ({
-        language: file.language,
-        dubbedTrailerFileName: file.dubbedTrailerFileName || '',
-        dubbedTrailerUrl: file.dubbedTrailerUrl || '',
-        dubbedSubtitleFileName: file.dubbedSubtitleFileName || '',
-        dubbedSubtitleUrl: file.dubbedSubtitleUrl || '',
-      }));
-      console.log("🟢 Dubbed files processed:", projectData.dubbedFileData);
-    } else {
-      console.log("ℹ️ No dubbed files provided or empty array.");
-    }
+      if (Array.isArray(dubbedFiles) && dubbedFiles.length > 0) {
+        projectData.dubbedFileData = dubbedFiles.map((file) => ({
+          language: file.language,
+          dubbedTrailerFileName: file.dubbedTrailerFileName || '',
+          dubbedTrailerUrl: file.dubbedTrailerUrl || '',
+          dubbedSubtitleFileName: file.dubbedSubtitleFileName || '',
+          dubbedSubtitleUrl: file.dubbedSubtitleUrl || '',
+        }));
+        console.log("🟢 Dubbed files processed:", projectData.dubbedFileData);
+      } else {
+        console.log("ℹ️ No dubbed files provided or empty array.");
+      }
 
-    if (Array.isArray(specificationsInfo.genres)) {
-      specificationsInfo.genres = specificationsInfo.genres
-        .map((g) => (typeof g === "string" ? g : g?.name))
-        .filter(Boolean)
-        .join(", ")
-        .toLowerCase();
-      console.log("🟢 Normalized genres:", specificationsInfo.genres);
-    }
+      if (Array.isArray(specificationsInfo.genres)) {
+        specificationsInfo.genres = specificationsInfo.genres
+          .map((g) => (typeof g === "string" ? g : g?.name))
+          .filter(Boolean)
+          .join(", ")
+          .toLowerCase();
+        console.log("🟢 Normalized genres:", specificationsInfo.genres);
+      }
 
-    // ✅ FIX: Save multiple rightsGroups in RightsInfoGroup
-    let rightsInfoDoc = null;
-    if (
-      rightsInfo &&
-      typeof rightsInfo === "object" &&
-      Array.isArray(rightsInfo.rights)
-    ) {
-      const rightsGroupsArray = rightsInfo.rights.map((group) => ({
-        rights: group.rights || [],
-        territories: group.territories || {
-          includedRegions: [],
-          excludeCountries: [],
-        },
-        licenseTerm: group.licenseTerm || [],
-        platformType: group.platformType || [],
-        usageRights: group.usageRights || [],
-        paymentTerms: group.paymentTerms || [],
-        listPrice: group.listPrice || "",
-      }));
+      // ✅ FIX: Save multiple rightsGroups in RightsInfoGroup
+      let rightsInfoDoc = null;
+      if (
+        rightsInfo &&
+        typeof rightsInfo === "object" &&
+        Array.isArray(rightsInfo.rights)
+      ) {
+        const rightsGroupsArray = rightsInfo.rights.map((group) => ({
+          rights: group.rights || [],
+          territories: group.territories || {
+            includedRegions: [],
+            excludeCountries: [],
+          },
+          licenseTerm: group.licenseTerm || [],
+          platformType: group.platformType || [],
+          usageRights: group.usageRights || [],
+          paymentTerms: group.paymentTerms || [],
+          listPrice: group.listPrice || "",
+        }));
 
-      rightsInfoDoc = new RightsInfoGroup({
+        rightsInfoDoc = new RightsInfoGroup({
+          userId: cleanUserId,
+          projectName: projectInfo.projectName,
+          rightsGroups: rightsGroupsArray,
+        });
+
+        await rightsInfoDoc.save();
+        console.log("🟢 RightsInfoGroup saved:", rightsInfoDoc);
+      } else {
+        console.log("ℹ️ No rightsInfo object provided or invalid.");
+      }
+
+      // Save other parts
+      const projectInfoDoc = new ProjectInfoSchema(projectData);
+      await projectInfoDoc.save();
+      console.log("🟢 ProjectInfoSchema saved:", projectInfoDoc);
+
+      const creditsInfoDoc = new CreditsInfoSchema(creditsInfo);
+      await creditsInfoDoc.save();
+      console.log("🟢 CreditsInfoSchema saved:", creditsInfoDoc);
+
+      const specificationsInfoDoc = new SpecificationsInfo(specificationsInfo);
+      await specificationsInfoDoc.save();
+      console.log("🟢 SpecificationsInfo saved:", specificationsInfoDoc);
+
+      const srtFilesMapped = Array.isArray(srtInfo?.srtFiles)
+        ? srtInfo.srtFiles.map((file) => ({
+          fileName: file.fileName || "",
+          fileUrl: file.filePath || file.fileUrl || "",
+        }))
+        : [];
+
+      const infoDocsMapped = Array.isArray(srtInfo?.infoDocuments)
+        ? srtInfo.infoDocuments.map((file) => ({
+          fileName: file.fileName || "",
+          fileUrl: file.filePath || file.fileUrl || "",
+        }))
+        : [];
+
+      const combinedDoc = new SrtInfoFileSchema({
+        srtFiles: srtFilesMapped,
+        infoDocuments: infoDocsMapped,
         userId: cleanUserId,
         projectName: projectInfo.projectName,
-        rightsGroups: rightsGroupsArray,
+        orgName: projectInfo.orgName || "",
       });
 
-      await rightsInfoDoc.save();
-      console.log("🟢 RightsInfoGroup saved:", rightsInfoDoc);
-    } else {
-      console.log("ℹ️ No rightsInfo object provided or invalid.");
+      await combinedDoc.save();
+      console.log("🟢 SrtInfoFileSchema saved:", combinedDoc);
+
+      const projectFormDoc = new ProjectForm({
+        projectInfo: projectInfoDoc._id,
+        creditsInfo: creditsInfoDoc._id,
+        specificationsInfo: specificationsInfoDoc._id,
+        rightsInfo: rightsInfoDoc ? [rightsInfoDoc._id] : [],
+        srtFiles: [combinedDoc._id],
+      });
+
+      await projectFormDoc.save();
+      console.log("🟢 ProjectForm saved:", projectFormDoc);
+
+      // Link references
+      projectInfoDoc.creditsInfoId = creditsInfoDoc._id;
+      projectInfoDoc.specificationsInfoId = specificationsInfoDoc._id;
+      projectInfoDoc.rightsInfoId = rightsInfoDoc?._id || null;
+      projectInfoDoc.srtFilesId = combinedDoc._id;
+      projectInfoDoc.projectFormId = projectFormDoc._id;
+
+      await projectInfoDoc.save();
+      console.log("🟢 ProjectInfoDoc updated with references:", projectInfoDoc);
+
+      return projectFormDoc;
+    } catch (error) {
+      console.error("❌ Error in service:", error);
+      throw new Error("Error saving project form: " + error.message);
     }
-
-    // Save other parts
-    const projectInfoDoc = new ProjectInfoSchema(projectData);
-    await projectInfoDoc.save();
-    console.log("🟢 ProjectInfoSchema saved:", projectInfoDoc);
-
-    const creditsInfoDoc = new CreditsInfoSchema(creditsInfo);
-    await creditsInfoDoc.save();
-    console.log("🟢 CreditsInfoSchema saved:", creditsInfoDoc);
-
-    const specificationsInfoDoc = new SpecificationsInfo(specificationsInfo);
-    await specificationsInfoDoc.save();
-    console.log("🟢 SpecificationsInfo saved:", specificationsInfoDoc);
-
-    const srtFilesMapped = Array.isArray(srtInfo?.srtFiles)
-      ? srtInfo.srtFiles.map((file) => ({
-          fileName: file.fileName || "",
-          fileUrl: file.filePath || file.fileUrl || "",
-        }))
-      : [];
-
-    const infoDocsMapped = Array.isArray(srtInfo?.infoDocuments)
-      ? srtInfo.infoDocuments.map((file) => ({
-          fileName: file.fileName || "",
-          fileUrl: file.filePath || file.fileUrl || "",
-        }))
-      : [];
-
-    const combinedDoc = new SrtInfoFileSchema({
-      srtFiles: srtFilesMapped,
-      infoDocuments: infoDocsMapped,
-      userId: cleanUserId,
-      projectName: projectInfo.projectName,
-      orgName: projectInfo.orgName || "",
-    });
-
-    await combinedDoc.save();
-    console.log("🟢 SrtInfoFileSchema saved:", combinedDoc);
-
-    const projectFormDoc = new ProjectForm({
-      projectInfo: projectInfoDoc._id,
-      creditsInfo: creditsInfoDoc._id,
-      specificationsInfo: specificationsInfoDoc._id,
-      rightsInfo: rightsInfoDoc ? [rightsInfoDoc._id] : [],
-      srtFiles: [combinedDoc._id],
-    });
-
-    await projectFormDoc.save();
-    console.log("🟢 ProjectForm saved:", projectFormDoc);
-
-    // Link references
-    projectInfoDoc.creditsInfoId = creditsInfoDoc._id;
-    projectInfoDoc.specificationsInfoId = specificationsInfoDoc._id;
-    projectInfoDoc.rightsInfoId = rightsInfoDoc?._id || null;
-    projectInfoDoc.srtFilesId = combinedDoc._id;
-    projectInfoDoc.projectFormId = projectFormDoc._id;
-
-    await projectInfoDoc.save();
-    console.log("🟢 ProjectInfoDoc updated with references:", projectInfoDoc);
-
-    return projectFormDoc;
-  } catch (error) {
-    console.error("❌ Error in service:", error);
-    throw new Error("Error saving project form: " + error.message);
   }
-}
 
 
 
 
-,
+  ,
 
 
   getAllProjects: async () => {
@@ -302,53 +302,27 @@ createProjectForm: async (
     }
   },
 
- findProjectFormByProjectInfo: async (projectInfoId) => {
-  try {
-    const id = new mongoose.Types.ObjectId(projectInfoId);
-    return await ProjectForm.findOne({ projectInfo: id });
-  } catch (error) {
-    console.error("Error finding project form by projectInfo ID:", error.message);
-    throw new Error("Error finding project form by projectInfo ID");
-  }
-},
+  findProjectFormByProjectInfo: async (projectInfoId) => {
+    try {
+      const id = new mongoose.Types.ObjectId(projectInfoId);
+      return await ProjectForm.findOne({ projectInfo: id });
+    } catch (error) {
+      console.error("Error finding project form by projectInfo ID:", error.message);
+      throw new Error("Error finding project form by projectInfo ID");
+    }
+  },
 
-bulkCreateProjectForms: async (projects, userId) => {
-  try {
-    const createdProjects = [];
-    const skippedProjects = [];
+  bulkCreateProjectForms: async (projects, userId) => {
+    try {
+      const createdProjects = [];
+      const skippedProjects = [];
 
-    // --- Inner utility to transform flat to nested ---
-    function transformFlatToNestedProject(flatProject) {
-      const {
-        projectTitle,
-        projectName,
-        briefSynopsis,
-        projectType,
-        posterFileName,
-        bannerFileName,
-        trailerFileName,
-        movieFileName,
-        projectPosterS3Url,
-        projectBannerS3Url,
-        projectTrailerS3Url,
-        projectMovieS3Url,
-        isPublic,
-        dubbedFileData,
-
-        producers,
-        directors,
-        writers,
-        actors,
-
-        genres,
-        language,
-        availableLanguages,
-      } = flatProject;
-
-      return {
-        projectInfo: {
+      // --- Inner utility to transform flat to nested ---
+      // --- Inner utility to transform flat to nested ---
+      function transformFlatToNestedProject(flatProject) {
+        const {
           projectTitle,
-          projectName: projectName?.trim() || projectTitle,
+          projectName,
           briefSynopsis,
           projectType,
           posterFileName,
@@ -360,87 +334,131 @@ bulkCreateProjectForms: async (projects, userId) => {
           projectTrailerS3Url,
           projectMovieS3Url,
           isPublic,
-          dubbedFileData: Array.isArray(dubbedFileData)
-            ? dubbedFileData.map((item) => ({
+          dubbedFileData,
+
+          producers,
+          directors,
+          writers,
+          actors,
+
+          genres,
+          language,
+          rating,
+          completionDate,
+          runtime,
+        } = flatProject;
+
+        return {
+          projectInfo: {
+            projectTitle,
+            projectName: projectName?.trim() || projectTitle,
+            briefSynopsis,
+            projectType,
+            posterFileName,
+            bannerFileName,
+            trailerFileName,
+            movieFileName,
+            projectPosterS3Url,
+            projectBannerS3Url,
+            projectTrailerS3Url,
+            projectMovieS3Url,
+            isPublic,
+            dubbedFileData: Array.isArray(dubbedFileData)
+              ? dubbedFileData.map((item) => ({
                 language: item.language,
                 dubbedTrailerFileName: item.dubbedTrailerFileName,
                 dubbedTrailerUrl: item.dubbedTrailerUrl,
                 dubbedSubtitleFileName: item.dubbedSubtitleFileName,
                 dubbedSubtitleUrl: item.dubbedSubtitleUrl,
               }))
-            : [],
-        },
-        creditsInfo: {
-          producers,
-          directors,
-          writers,
-          actors,
-        },
-        specificationsInfo: {
-          genres,
-          language,
-          availableLanguages,
-        },
-        rightsInfo: {},
-        srtInfo: {},
-      };
-    }
-
-    // --- Main loop ---
-    for (let i = 0; i < projects.length; i++) {
-      const rawFlatProject = projects[i];
-      const raw = transformFlatToNestedProject(rawFlatProject || {});
-
-      const {
-        projectInfo = {},
-        creditsInfo = {},
-        specificationsInfo = {},
-        rightsInfo = {},
-        srtInfo = {},
-      } = raw;
-
-      let {
-        projectTitle,
-        projectName: rawProjectName,
-        briefSynopsis,
-        projectType,
-        posterFileName,
-        bannerFileName,
-        trailerFileName,
-        movieFileName,
-        projectPosterS3Url,
-        projectBannerS3Url,
-        projectTrailerS3Url,
-        projectMovieS3Url,
-        isPublic,
-        dubbedFileData = [],
-      } = projectInfo;
-
-      if (!projectTitle) {
-        skippedProjects.push({ index: i, reason: "Missing required field: projectTitle" });
-        continue;
+              : [],
+          },
+          creditsInfo: {
+            producers,
+            directors,
+            writers,
+            actors,
+          },
+          specificationsInfo: {
+            projectType,
+            genres,
+            language,
+            rating,
+            completionDate,
+            runtime,
+          },
+          rightsInfo: {
+            rightsGroups: flatProject.rightsGroups || [],
+          },
+          srtInfo: {
+            srtFiles: flatProject.srtFiles || [],
+            infoDocuments: flatProject.infoDocuments || [],
+          },
+        };
       }
 
-      const projectName = rawProjectName?.trim() || projectTitle;
 
-      // ✅ Coerce isPublic into correct string values
-      if (typeof isPublic === 'boolean') {
-        isPublic = isPublic ? 'public' : 'private';
-      } else if (typeof isPublic !== 'string' || !['public', 'private'].includes(isPublic)) {
-        isPublic = 'private';
-      }
+      // --- Main loop ---
+      for (let i = 0; i < projects.length; i++) {
+        const rawFlatProject = projects[i];
+        const raw = transformFlatToNestedProject(rawFlatProject || {});
 
-      // ✅ Genres as comma string if array
-      const transformedSpecificationsInfo = {
-        ...specificationsInfo,
-        genres: Array.isArray(specificationsInfo.genres)
-          ? specificationsInfo.genres.join(", ")
-          : specificationsInfo.genres || "",
-      };
+        const {
+          projectInfo = {},
+          creditsInfo = {},
+          specificationsInfo = {},
+          rightsInfo = {},
+          srtInfo = {},
+        } = raw;
 
-      // ✅ Filter invalid dubbed file entries
-      const cleanDubbedFiles = Array.isArray(dubbedFileData)
-        ? dubbedFileData
+        let {
+          projectTitle,
+          projectName: rawProjectName,
+          briefSynopsis,
+          projectType,
+          posterFileName,
+          bannerFileName,
+          trailerFileName,
+          movieFileName,
+          projectPosterS3Url,
+          projectBannerS3Url,
+          projectTrailerS3Url,
+          projectMovieS3Url,
+          isPublic,
+          dubbedFileData = [],
+        } = projectInfo;
+
+        if (!projectTitle) {
+          skippedProjects.push({ index: i, reason: "Missing required field: projectTitle" });
+          continue;
+        }
+
+        const projectName = rawProjectName?.trim() || projectTitle;
+
+        // ✅ Coerce isPublic into correct string values
+        if (typeof isPublic === 'boolean') {
+          isPublic = isPublic ? 'public' : 'private';
+        } else if (typeof isPublic !== 'string' || !['public', 'private'].includes(isPublic)) {
+          isPublic = 'private';
+        }
+
+        // ✅ Genres as comma string if array
+        const transformedSpecificationsInfo = {
+          ...specificationsInfo,
+          genres: Array.isArray(specificationsInfo.genres)
+            ? specificationsInfo.genres.join(", ")
+            : specificationsInfo.genres || "",
+          projectType: specificationsInfo.projectType || "",
+          language: specificationsInfo.language || "",
+          rating: specificationsInfo.rating || "",
+          completionDate: specificationsInfo.completionDate || "",
+          runtime: specificationsInfo.runtime || "",
+        };
+
+
+        // ✅ Filter invalid dubbed file entries
+        const cleanDubbedFiles = Array.isArray(dubbedFileData)
+          ? dubbedFileData
             .filter(
               (file) =>
                 typeof file.language === "string" &&
@@ -454,61 +472,61 @@ bulkCreateProjectForms: async (projects, userId) => {
               dubbedSubtitleFileName: file.dubbedSubtitleFileName || "",
               dubbedSubtitleUrl: file.dubbedSubtitleUrl || "",
             }))
-        : [];
+          : [];
 
-      // ✅ Create subdocs
-      const createdCreditsInfo = await CreditsInfoSchema.create(creditsInfo);
-      const createdSpecificationsInfo = await SpecificationsInfo.create(transformedSpecificationsInfo);
-      const createdRightsInfo = await RightsInfoGroup.create(rightsInfo);
-      const createdSrtInfo = await SrtInfoFileSchema.create(srtInfo);
+        // ✅ Create subdocs
+        const createdCreditsInfo = await CreditsInfoSchema.create(creditsInfo);
+        const createdSpecificationsInfo = await SpecificationsInfo.create(transformedSpecificationsInfo);
+        const createdRightsInfo = await RightsInfoGroup.create(rightsInfo);
+        const createdSrtInfo = await SrtInfoFileSchema.create(srtInfo);
 
-      // ✅ Create ProjectInfo
-      const createdProjectInfo = await ProjectInfoSchema.create({
-        projectTitle,
-        projectName,
-        briefSynopsis,
-        projectType,
-        posterFileName,
-        bannerFileName,
-        trailerFileName,
-        movieFileName,
-        projectPosterS3Url,
-        projectBannerS3Url,
-        projectTrailerS3Url,
-        projectMovieS3Url,
-        isPublic,
-        userId,
-        dubbedFileData: cleanDubbedFiles,
-        creditsInfoId: createdCreditsInfo._id,
-        specificationsInfoId: createdSpecificationsInfo._id,
-        rightsInfoId: createdRightsInfo._id,
-        srtFilesId: createdSrtInfo._id,
-      });
+        // ✅ Create ProjectInfo
+        const createdProjectInfo = await ProjectInfoSchema.create({
+          projectTitle,
+          projectName,
+          briefSynopsis,
+          projectType,
+          posterFileName,
+          bannerFileName,
+          trailerFileName,
+          movieFileName,
+          projectPosterS3Url,
+          projectBannerS3Url,
+          projectTrailerS3Url,
+          projectMovieS3Url,
+          isPublic,
+          userId,
+          dubbedFileData: cleanDubbedFiles,
+          creditsInfoId: createdCreditsInfo._id,
+          specificationsInfoId: createdSpecificationsInfo._id,
+          rightsInfoId: createdRightsInfo._id,
+          srtFilesId: createdSrtInfo._id,
+        });
 
-      createdProjects.push(createdProjectInfo);
+        createdProjects.push(createdProjectInfo);
+      }
+
+      // --- Summary message
+      let message;
+      if (createdProjects.length === 0 && skippedProjects.length > 0) {
+        message = "❌ All projects were skipped due to missing required fields.";
+      } else if (createdProjects.length > 0 && skippedProjects.length > 0) {
+        message = "⚠️ Some projects created, some skipped due to missing fields.";
+      } else {
+        message = "✅ All projects created successfully.";
+      }
+
+      return {
+        message,
+        count: createdProjects.length,
+        projects: createdProjects,
+        skipped: skippedProjects,
+      };
+    } catch (error) {
+      console.error("❌ Error in bulkCreateProjectForms:", error);
+      throw new Error("Bulk project creation failed. Please check server logs.");
     }
-
-    // --- Summary message
-    let message;
-    if (createdProjects.length === 0 && skippedProjects.length > 0) {
-      message = "❌ All projects were skipped due to missing required fields.";
-    } else if (createdProjects.length > 0 && skippedProjects.length > 0) {
-      message = "⚠️ Some projects created, some skipped due to missing fields.";
-    } else {
-      message = "✅ All projects created successfully.";
-    }
-
-    return {
-      message,
-      count: createdProjects.length,
-      projects: createdProjects,
-      skipped: skippedProjects,
-    };
-  } catch (error) {
-    console.error("❌ Error in bulkCreateProjectForms:", error);
-    throw new Error("Bulk project creation failed. Please check server logs.");
   }
-}
 
 
 

@@ -243,45 +243,112 @@ export const listS3Contents = async (path = '') => {
 
 
 // Function to delete a folder by deleting all objects (files and subfolders) inside it
+// export const deleteFolder = async (folderPath) => {
+//   const BUCKET_NAME = process.env.S3_BUCKET_NAME;
+
+//   if (!BUCKET_NAME) {
+//     throw new Error("❌ S3_BUCKET_NAME environment variable is not defined.");
+//   }
+
+//   console.log("S3_BUCKET_NAME =", BUCKET_NAME);
+//   console.log("Folder path =", folderPath);
+
+//   try {
+//     let continuationToken = undefined;
+
+//     do {
+//       const params = {
+//         Bucket: BUCKET_NAME,
+//         Prefix: folderPath,
+//         ContinuationToken: continuationToken,
+//       };
+
+//       const listedObjects = await s3.listObjectsV2(params).promise();
+
+//       if (!listedObjects.Contents || listedObjects.Contents.length === 0) {
+//         console.log('Folder is empty or does not exist.');
+//         break;
+//       }
+
+//       const deleteParams = {
+//         Bucket: BUCKET_NAME,
+//         Delete: {
+//           Objects: listedObjects.Contents.map(({ Key }) => ({ Key })),
+//           Quiet: false,
+//         },
+//       };
+
+//       await s3.deleteObjects(deleteParams).promise();
+//       console.log(`✅ Deleted ${listedObjects.Contents.length} objects from folder "${folderPath}"`);
+
+//       continuationToken = listedObjects.IsTruncated ? listedObjects.NextContinuationToken : undefined;
+//     } while (continuationToken);
+
+//     console.log(`✅ Folder "${folderPath}" and all its contents deleted successfully.`);
+//   } catch (error) {
+//     console.error('❌ Error deleting folder:', error);
+//     throw new Error('Failed to delete folder from S3');
+//   }
+// };
+
 export const deleteFolder = async (folderPath) => {
+  const BUCKET_NAME = process.env.S3_BUCKET_NAME;
+
+  if (!BUCKET_NAME) {
+    throw new Error("❌ S3_BUCKET_NAME environment variable is not defined.");
+  }
+
+  console.log("S3_BUCKET_NAME =", BUCKET_NAME);
+  console.log("Folder path =", folderPath);
+
   try {
     let continuationToken = undefined;
+    let totalDeleted = 0;
 
     do {
       const params = {
-        Bucket: process.env.S3_BUCKET_NAME,
+        Bucket: BUCKET_NAME,
         Prefix: folderPath,
         ContinuationToken: continuationToken,
       };
 
-      // List objects with continuation token for pagination
       const listedObjects = await s3.listObjectsV2(params).promise();
 
       if (!listedObjects.Contents || listedObjects.Contents.length === 0) {
-        console.log('Folder is empty or does not exist.');
+        console.log('📂 Folder is empty or does not exist.');
         break;
       }
 
-      // Prepare objects to delete
       const deleteParams = {
-        Bucket: process.env.S3_BUCKET_NAME,
+        Bucket: BUCKET_NAME,
         Delete: {
           Objects: listedObjects.Contents.map(({ Key }) => ({ Key })),
           Quiet: false,
         },
       };
 
-      // Delete objects
-      await s3.deleteObjects(deleteParams).promise();
-      console.log(`Deleted ${listedObjects.Contents.length} objects from folder ${folderPath}`);
+      const deleteResponse = await s3.deleteObjects(deleteParams).promise();
+      const deletedCount = deleteResponse.Deleted?.length || 0;
+      totalDeleted += deletedCount;
+
+      console.log(`✅ Deleted ${deletedCount} objects from folder "${folderPath}"`);
 
       continuationToken = listedObjects.IsTruncated ? listedObjects.NextContinuationToken : undefined;
+
     } while (continuationToken);
 
-    console.log(`Folder ${folderPath} and all its contents deleted successfully.`);
+    console.log(`✅ Folder "${folderPath}" and all its contents deleted successfully.`);
+
+    return {
+      success: true,
+      deleted: totalDeleted,
+      folderPath,
+      message: `Folder "${folderPath}" deleted successfully.`,
+    };
+
   } catch (error) {
-    console.error('Error deleting folder:', error);
-    throw new Error('Failed to delete folder from S3');
+    console.error('❌ Error deleting folder:', error);
+    throw new Error(error.message || 'Failed to delete folder from S3');
   }
 };
 
