@@ -15,7 +15,6 @@ export const registerOrganizationWithUser = (req, res) => {
   const busboy = pkg({ headers: req.headers });
   const fields = {};
   const fileUrls = {};
-
   const uploads = [];
 
   busboy.on('field', (fieldname, val) => {
@@ -24,30 +23,25 @@ export const registerOrganizationWithUser = (req, res) => {
 
   busboy.on('file', (fieldname, file, filename, encoding, mimetype) => {
     const key = `org-pdfs/${Date.now()}-${filename}`;
-    console.log("key", key)
     const params = {
       Bucket: process.env.S3_BUCKET_NAME,
       Key: key,
       Body: file,
       ContentType: mimetype,
     };
-    console.log("params", params)
-
     const uploadPromise = s3.upload(params).promise()
       .then(data => {
         fileUrls[fieldname] = data.Location;
       });
-
-      console.log("uploadPromise", uploadPromise)
-
     uploads.push(uploadPromise);
   });
-  console.log("uploads", uploads)
+
   busboy.on('finish', async () => {
     try {
       await Promise.all(uploads);
 
       const {
+        organizationId, // for selected org
         orgName,
         orgAddress,
         orgCorpRegNo,
@@ -58,46 +52,65 @@ export const registerOrganizationWithUser = (req, res) => {
         userName,
         userEmail,
         role,
-        password
+        password,
+        createdBy
       } = fields;
 
-      if (!orgName || !orgAddress || !orgCorpRegNo || !orgGstNo || !primaryName || !primaryEmail || !primaryNo || !password) {
-        return res.status(400).json({ message: 'All required fields must be provided' });
+      // Always validate user fields
+      if (!primaryName || !primaryEmail || !primaryNo || !userName || !userEmail || !role || !password) {
+        return res.status(400).json({ message: 'All required user fields must be provided' });
       }
 
+      // Check if user already exists
       const existingUser = await User.findOne({ email: userEmail });
       if (existingUser) {
         return res.status(400).json({ message: 'User already exists' });
       }
 
-      const newOrganization = new Organization({
-        orgName,
-        orgAddress,
-        orgCorpRegNo,
-        orgGstNo,
-        primaryName,
-        primaryEmail,
-        primaryNo,
-        orgCorpPdf: fileUrls.orgCorpPdf || '',
-        orgGstPdf: fileUrls.orgGstPdf || '',
-        orgAgreementPdf: fileUrls.orgAgreementPdf || ''
-      });
+      let organization;
+      if (organizationId) {
+        // Use existing organization
+        organization = await Organization.findById(organizationId);
+        if (!organization) {
+          return res.status(404).json({ message: 'Selected organization not found' });
+        }
+      } else {
+        // Validate org fields for new org
+        if (!orgName || !orgAddress || !orgCorpRegNo || !orgGstNo) {
+          return res.status(400).json({ message: 'All required organization fields must be provided' });
+        }
+        // Create new organization
+        const newOrganization = new Organization({
+          orgName,
+          orgAddress,
+          orgCorpRegNo,
+          orgGstNo,
+          primaryName,
+          primaryEmail,
+          primaryNo,
+          orgCorpPdf: fileUrls.orgCorpPdf || '',
+          orgGstPdf: fileUrls.orgGstPdf || '',
+          orgAgreementPdf: fileUrls.orgAgreementPdf || ''
+        });
+        organization = await newOrganization.save();
+      }
 
-      const savedOrganization = await newOrganization.save();
-
+      // Hash password
       const salt = await bcrypt.genSalt(10);
       const passwordHash = await bcrypt.hash(password, salt);
 
+      // Create new user
       const newUser = new User({
         name: userName,
-        orgName,
+        orgName: organization.orgName,
         email: userEmail,
-        organizationId: savedOrganization._id,
+        organizationId: organization._id,
         role,
         passwordHash,
         isVerified: false,
         verificationToken: uuidv4(),
-        tokenExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000)
+        tokenExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        createdBy
       });
 
       const savedUser = await newUser.save();
@@ -105,8 +118,8 @@ export const registerOrganizationWithUser = (req, res) => {
       return res.status(201).json({
         message: 'Organization and user registered successfully',
         organization: {
-          id: savedOrganization._id,
-          name: savedOrganization.orgName
+          id: organization._id,
+          name: organization.orgName
         },
         user: {
           id: savedUser._id,
@@ -124,6 +137,19 @@ export const registerOrganizationWithUser = (req, res) => {
   req.pipe(busboy);
 };
 
+
+export const getAllOrganizations = async (req, res) => {
+  try {
+    const organizations = await Organization.find();
+    res.status(200).json({
+      message: 'Organizations fetched successfully',
+      organizations
+    });
+  } catch (error) {
+    console.error('Error fetching organizations:', error);
+    res.status(500).json({ message: 'Internal server error', error: error.message });
+  }
+};
 
 
 // import { Organization } from '../models/orgModel.js';
