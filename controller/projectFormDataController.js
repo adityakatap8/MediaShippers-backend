@@ -588,21 +588,23 @@ const projectFormDataController = {
       // INCLUDING REGIONS
       if (includingRegions) {
         const regions = Array.isArray(includingRegions) ? includingRegions : includingRegions.split(',');
+        console.log('🌍 Including regions:', regions);
         const regionsLower = regions.map(r => r.toLowerCase());
+        console.log('🌍 Including regions:', regionsLower);
 
         const isWorldwide = regionsLower.length === 1 && regionsLower[0] === "worldwide";
         if (isWorldwide) {
           filterConditions.push({
             $or: [
               { "formData.rightsInfo.territories.id": "worldwide" },
-              { "formData.rightsInfo.territories.includedRegions.name": "worldwide" }
+              { "formData.rightsInfo.territories.includedRegions.id": "worldwide" }
             ]
           });
         } else {
           filterConditions.push({
             $or: [
               { "formData.rightsInfo.territories.id": { $in: [...regionsLower, "worldwide"] } },
-              { "formData.rightsInfo.territories.includedRegions.name": { $in: [...regionsLower, "SAARC"] } }
+              { "formData.rightsInfo.territories.includedRegions.id": { $in: [...regionsLower, "worldwide"] } }
             ]
           });
         }
