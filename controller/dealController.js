@@ -631,7 +631,7 @@ export const updateDealWithMessageAndRemoveFromCart = async (req, res) => {
   const { dealId, userId } = req.params; // Extract dealId and userId from request parameters
   const { licenseTerm, paymentTerms, remarks, status, message } = req.body; // Extract payload details
 
-  if (!dealId || !userId || !message || !message.senderId || !message.reciverId || !message.content) {
+  if (!dealId || !userId) {
     return res.status(400).json({ message: 'dealId, userId, and valid message payload are required' });
   }
 
@@ -647,9 +647,9 @@ export const updateDealWithMessageAndRemoveFromCart = async (req, res) => {
     }
 
     // 2. Update the deal with new details
-    deal.licenseTerm = licenseTerm || deal.licenseTerm;
-    deal.paymentTerms = paymentTerms || deal.paymentTerms;
-    deal.remarks = remarks || deal.remarks;
+    if (licenseTerm) deal.licenseTerm = licenseTerm;
+    if (paymentTerms) deal.paymentTerms = paymentTerms;
+    if (remarks) deal.remarks = remarks;
     deal.status = status || deal.status;
     deal.updatedAt = new Date();
 
