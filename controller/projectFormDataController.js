@@ -493,13 +493,15 @@ const projectFormDataController = {
         contentCategory,
         languages,
         genre,
-        yearOfRelease
+        yearOfRelease,
+        organizationIds
       } = req.query;
 
       console.log('🔍 Filtering projects with params:', {
         rights,
         includingRegions, usageRights, contentCategory, languages, genre, yearOfRelease,
         userId,
+        organizationIds
       })
 
       if (!userId || !role) {
@@ -524,64 +526,64 @@ const projectFormDataController = {
       // ...existing code...
       // RIGHTS
       if (rights) {
-        // Normalize rights to array of lowercase strings
+        // Normalize to array of lowercase rights
         const rightsArr = Array.isArray(rights)
           ? rights.map(r => r.toLowerCase())
           : [rights.toLowerCase()];
 
-        if (rightsArr.length === 1 && rightsArr[0] === "all rights") {
-          filterConditions.push({
-            $expr: {
-              $gt: [
-                {
-                  $size: {
-                    $filter: {
-                      input: {
-                        $reduce: {
-                          input: "$formData.rightsInfo",
-                          initialValue: [],
-                          in: { $concatArrays: ["$$value", { $ifNull: ["$$this.rights", []] }] }
+        filterConditions.push({
+          $expr: {
+            $gt: [
+              {
+                $size: {
+                  $filter: {
+                    input: {
+                      $ifNull: [
+                        {
+                          $reduce: {
+                            input: "$rightsInfoData",
+                            initialValue: [],
+                            in: { $concatArrays: ["$$value", { $ifNull: ["$$this.rights", []] }] }
+                          }
+                        },
+                        [] // fallback if rightsInfo is null
+                      ]
+                    },
+                    as: "right",
+                    cond: {
+                      $or: [
+                        // Case 1: user searched only "all rights"
+                        {
+                          $and: [
+                            { $eq: [rightsArr.length, 1] },
+                            { $eq: [rightsArr[0], "all rights"] },
+                            { $eq: [{ $toLower: "$$right.name" }, "all rights"] }
+                          ]
+                        },
+                        // Case 2: otherwise match requested rights OR "all rights"
+                        {
+                          $and: [
+                            { $not: { $and: [{ $eq: [rightsArr.length, 1] }, { $eq: [rightsArr[0], "all rights"] }] } },
+                            {
+                              $or: [
+                                { $in: [{ $toLower: "$$right.name" }, rightsArr] },
+                                { $eq: [{ $toLower: "$$right.name" }, "all rights"] }
+                              ]
+                            }
+                          ]
                         }
-                      },
-                      as: "right",
-                      cond: { $eq: [{ $toLower: "$$right.name" }, "all rights"] }
+                      ]
                     }
                   }
-                },
-                0
-              ]
-            }
-          });
-        } else {
-          filterConditions.push({
-            $expr: {
-              $gt: [
-                {
-                  $size: {
-                    $filter: {
-                      input: {
-                        $reduce: {
-                          input: "$formData.rightsInfo",
-                          initialValue: [],
-                          in: { $concatArrays: ["$$value", { $ifNull: ["$$this.rights", []] }] }
-                        }
-                      },
-                      as: "right",
-                      cond: {
-                        $or: [
-                          { $in: [{ $toLower: "$$right.name" }, rightsArr] },
-                          { $eq: [{ $toLower: "$$right.name" }, "all rights"] }
-                        ]
-                      }
-                    }
-                  }
-                },
-                0
-              ]
-            }
-          });
-        }
+                }
+              },
+              0
+            ]
+          }
+        });
       }
+
+
       // ...existing code...
 
 
@@ -596,15 +598,15 @@ const projectFormDataController = {
         if (isWorldwide) {
           filterConditions.push({
             $or: [
-              { "formData.rightsInfo.territories.id": "worldwide" },
-              { "formData.rightsInfo.territories.includedRegions.id": "worldwide" }
+              { "rightsInfoData.territories.id": "worldwide" },
+              { "rightsInfoData.territories.includedRegions.id": "worldwide" }
             ]
           });
         } else {
           filterConditions.push({
             $or: [
-              { "formData.rightsInfo.territories.id": { $in: [...regionsLower, "worldwide"] } },
-              { "formData.rightsInfo.territories.includedRegions.id": { $in: [...regionsLower, "worldwide"] } }
+              { "rightsInfoData.territories.id": { $in: [...regionsLower, "worldwide"] } },
+              { "rightsInfoData.territories.includedRegions.id": { $in: [...regionsLower, "worldwide"] } }
             ]
           });
         }
@@ -617,8 +619,8 @@ const projectFormDataController = {
 
         filterConditions.push({
           $or: [
-            { "formData.rightsInfo.territories.country": { $in: countriesLower } },
-            { "formData.rightsInfo.territories.excludeCountries.name": { $in: countriesLower } }
+            { "rightsInfoData.territories.country": { $in: countriesLower } },
+            { "rightsInfoData.territories.excludeCountries.name": { $in: countriesLower } }
           ]
         });
       }
@@ -628,7 +630,7 @@ const projectFormDataController = {
         const usageArr = Array.isArray(usageRights) ? usageRights : usageRights.split(',');
 
         filterConditions.push({
-          "formData.rightsInfo": {
+          "rightsInfoData": {
             $elemMatch: {
               usageRights: {
                 $elemMatch: {
@@ -647,7 +649,7 @@ const projectFormDataController = {
       if (contentCategory) {
         const categoryArr = Array.isArray(contentCategory) ? contentCategory : contentCategory.split(',');
         filterConditions.push({
-          "formData.specificationsInfo.projectType": { $in: categoryArr.map(c => c.toLowerCase()) }
+          "specificationsInfoData.projectType": { $in: categoryArr.map(c => c.toLowerCase()) }
         });
       }
 
@@ -656,7 +658,7 @@ const projectFormDataController = {
         const langArr = Array.isArray(languages) ? languages : languages.split(',');
 
         filterConditions.push({
-          "formData.specificationsInfo.language": {
+          "specificationsInfoData.language": {
             $in: langArr.map(l => new RegExp(`^${l}$`, 'i')) // case-insensitive match
           }
         });
@@ -678,9 +680,9 @@ const projectFormDataController = {
                       $map: {
                         input: {
                           $cond: [
-                            { $isArray: "$formData.specificationsInfo.genres" },
-                            "$formData.specificationsInfo.genres",
-                            { $split: [{ $ifNull: ["$formData.specificationsInfo.genres", ""] }, ","] }
+                            { $isArray: "$specificationsInfoData.genres" },
+                            "$specificationsInfoData.genres",
+                            { $split: [{ $ifNull: ["$specificationsInfoData.genres", ""] }, ","] }
                           ]
                         },
                         as: "g",
@@ -705,7 +707,15 @@ const projectFormDataController = {
         const yearNums = yearArr.map(y => parseInt(y));
         filterConditions.push({
           $expr: {
-            $in: [{ $year: "$formData.specificationsInfo.completionDate" }, yearNums]
+            $in: [{ $year: "$specificationsInfoData.completionDate" }, yearNums]
+          }
+        });
+      }
+
+      if (organizationIds && organizationIds.length > 0) {
+        filterConditions.push({
+          "userData.organizationId": {
+            $in: organizationIds.map(id => id)
           }
         });
       }
@@ -716,48 +726,62 @@ const projectFormDataController = {
       }
 
       const pipeline = [
-        { $match: baseMatch },
         {
-          $lookup: {
-            from: "projectforms",
-            localField: "_id",
-            foreignField: "projectInfo",
-            as: "formData"
+          $addFields: {
+            userIdObj: { $toObjectId: "$userId" }
           }
         },
-        { $unwind: { path: "$formData", preserveNullAndEmptyArrays: true } },
+        // Lookup specifications
         {
           $lookup: {
             from: "specificationsinfos",
-            localField: "formData.specificationsInfo",
+            localField: "specificationsInfoId",
             foreignField: "_id",
-            as: "formData.specificationsInfo"
+            as: "specificationsInfoData"
           }
         },
-        { $unwind: { path: "$formData.specificationsInfo", preserveNullAndEmptyArrays: true } },
+
+        // Lookup rights
         {
           $lookup: {
             from: "rightsinfogroups",
-            localField: "formData.rightsInfo",
+            localField: "rightsInfoId",
             foreignField: "_id",
-            as: "formData.rightsInfo"
+            as: "rightsInfoData"
           }
         },
+
+        // Lookup user
+        {
+          $lookup: {
+            from: "users",
+            localField: "userIdObj",
+            foreignField: "_id",
+            as: "userData"
+          }
+        },
+        {
+          $unwind: {
+            path: "$userData",
+            preserveNullAndEmptyArrays: true
+          }
+        },
+
+        // Apply filters AFTER all lookups
         ...(filterConditions.length > 0 ? [{ $match: { $and: filterConditions } }] : []),
+
+        // Facet for pagination + total count
         {
           $facet: {
             totalCount: [{ $count: "count" }],
             projects: [
-              { $skip: skip },    // skip AFTER filters
-              { $limit: limitNum } // limit AFTER filters
-            ],
-            paginatedResults: [
               { $skip: skip },
               { $limit: limitNum }
             ]
           }
         }
       ];
+
 
       const projects = await ProjectInfo.aggregate(pipeline);
       console.log('📊 Aggregation pipeline executed:', projects);
