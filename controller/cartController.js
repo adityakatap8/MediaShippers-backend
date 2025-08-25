@@ -96,25 +96,41 @@ export const addToCart = async (req, res) => {
 
 
 export const deleteCartMovie = async (req, res) => {
-  const { userId, cartItemId } = req.params; // Extract userId and cartItemId from request parameters
+  const { userId, cartItemId } = req.params; // Treat cartItemId as dealId
 
   if (!userId || !cartItemId) {
-    return res.status(400).json({ message: 'User ID and Cart Item ID are required' });
+    return res.status(400).json({ message: 'User ID and dealId are required' });
   }
 
   try {
-    const result = await Cart.updateOne(
-      { userId }, // Match the cart by userId
-      { $pull: { movies: { movieId: cartItemId } } } // Remove the movie with the matching _id
+    // 1) Pull the deal from the requesting user's cart only
+    const cartPullResult = await Cart.updateOne(
+      { userId },
+      { $pull: { deals: { dealId: cartItemId } } }
     );
 
-    if (result.modifiedCount === 0) {
-      return res.status(404).json({ message: 'Cart item not found' });
+    if (cartPullResult.modifiedCount === 0) {
+      return res.status(404).json({ message: 'Deal not found in user\'s cart' });
     }
 
-    res.json({ message: 'Cart item removed successfully' });
+    // 2) Delete the main deal record
+    const mainDeleteResult = await Deal.findByIdAndDelete(cartItemId);
+    if (!mainDeleteResult) {
+      return res.status(404).json({ message: 'Deal not found' });
+    }
+
+    // 3) Return updated cart for the user
+    const updatedCart = await Cart.findOne({ userId }).populate('deals.dealId');
+
+    return res.status(200).json({
+      message: 'Deal removed from cart',
+      deleted: {
+        mainDealDeleted: Boolean(mainDeleteResult)
+      },
+      cart: updatedCart || null
+    });
   } catch (err) {
-    console.error('Error clearing cart item:', err);
-    res.status(500).json({ error: 'Failed to clear cart item' });
+    console.error('Error deleting deal from cart:', err);
+    res.status(500).json({ error: 'Failed to delete deal from cart' });
   }
 };
