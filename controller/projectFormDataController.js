@@ -536,15 +536,28 @@ const projectFormDataController = {
                 $size: {
                   $filter: {
                     input: {
-                      $ifNull: [
+                      $concatArrays: [
+                        // Case A: nested rights from rightsInfoData.rightsGroups
                         {
                           $reduce: {
-                            input: "$rightsInfoData",
+                            input: { $ifNull: ["$rightsInfoData", []] },
                             initialValue: [],
-                            in: { $concatArrays: ["$$value", { $ifNull: ["$$this.rights", []] }] }
+                            in: {
+                              $concatArrays: [
+                                "$$value",
+                                {
+                                  $reduce: {
+                                    input: { $ifNull: ["$$this.rightsGroups", []] },
+                                    initialValue: [],
+                                    in: { $concatArrays: ["$$value", { $ifNull: ["$$this.rights", []] }] }
+                                  }
+                                }
+                              ]
+                            }
                           }
                         },
-                        [] // fallback if rightsInfo is null
+                        // Case B: flat rights at root
+                        { $ifNull: ["$rights", []] }
                       ]
                     },
                     as: "right",
@@ -580,6 +593,7 @@ const projectFormDataController = {
           }
         });
       }
+
 
 
       // ...existing code...
@@ -625,22 +639,45 @@ const projectFormDataController = {
 
       // USAGE RIGHTS
       if (usageRights) {
+        // Normalize to array
         const usageArr = Array.isArray(usageRights) ? usageRights : usageRights.split(',');
+        const usageRegexArr = usageArr.map(u => new RegExp(`^${u}$`, 'i')); // case-insensitive regex
 
         filterConditions.push({
-          "rightsInfoData": {
-            $elemMatch: {
-              usageRights: {
+          $or: [
+            // Case A: usageRights inside rightsInfoData[].usageRights[]
+            {
+              rightsInfoData: {
                 $elemMatch: {
-                  name: {
-                    $in: usageArr.map(u => new RegExp(`^${u}$`, 'i')) // case-insensitive
+                  usageRights: {
+                    $elemMatch: { name: { $in: usageRegexArr } }
                   }
                 }
               }
+            },
+            // Case B: usageRights inside rightsInfoData[].rightsGroups[].usageRights[]
+            {
+              rightsInfoData: {
+                $elemMatch: {
+                  rightsGroups: {
+                    $elemMatch: {
+                      usageRights: {
+                        $elemMatch: { name: { $in: usageRegexArr } }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            // (Optional legacy) Case C: usageRights directly at root
+            {
+              usageRights: { $elemMatch: { name: { $in: usageRegexArr } } }
             }
-          }
+          ]
         });
       }
+
+
 
 
       // CONTENT CATEGORY
