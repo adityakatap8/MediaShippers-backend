@@ -515,8 +515,6 @@ const projectFormDataController = {
       let baseMatch = {};
       if (role === 'Seller') {
         baseMatch.userId = userId;
-      } else if (!['Buyer', 'Admin'].includes(role)) {
-        return res.status(400).json({ error: 'Invalid user role' });
       }
 
       // Build filter conditions
@@ -649,9 +647,16 @@ const projectFormDataController = {
       if (contentCategory) {
         const categoryArr = Array.isArray(contentCategory) ? contentCategory : contentCategory.split(',');
         filterConditions.push({
-          "specificationsInfoData.projectType": { $in: categoryArr.map(c => c.toLowerCase()) }
+          $or: categoryArr.map(c => {
+            // Convert underscores to regex that matches space OR underscore
+            const pattern = c.replace(/_/g, "[ _]");
+            return {
+              "specificationsInfoData.projectType": { $regex: new RegExp(pattern, "i") }
+            };
+          })
         });
       }
+
 
       // LANGUAGE
       if (languages) {
@@ -668,7 +673,7 @@ const projectFormDataController = {
       // GENRE
       if (genre) {
         const genreArr = Array.isArray(genre) ? genre : genre.split(',');
-        const genreLower = genreArr.map(g => g.toLowerCase());
+        const genreLower = genreArr.map(g => g.toLowerCase().trim());
 
         filterConditions.push({
           $expr: {
@@ -677,7 +682,7 @@ const projectFormDataController = {
                 $size: {
                   $filter: {
                     input: {
-                      $map: {
+                      $reduce: {
                         input: {
                           $cond: [
                             { $isArray: "$specificationsInfoData.genres" },
@@ -685,12 +690,48 @@ const projectFormDataController = {
                             { $split: [{ $ifNull: ["$specificationsInfoData.genres", ""] }, ","] }
                           ]
                         },
-                        as: "g",
-                        in: { $toLower: { $trim: { input: "$$g" } } }
+                        initialValue: [],
+                        in: {
+                          $concatArrays: [
+                            "$$value",
+                            {
+                              $cond: [
+                                { $eq: [{ $type: "$$this" }, "string"] },
+                                { $split: ["$$this", ","] }, // split string like "crime, thriller"
+                                [
+                                  {
+                                    $cond: [
+                                      { $eq: [{ $type: "$$this" }, "array"] },
+                                      { $toString: { $first: "$$this" } }, // convert ["crime, thriller"] → "crime, thriller"
+                                      "$$this"
+                                    ]
+                                  }
+                                ]
+                              ]
+                            }
+                          ]
+                        }
                       }
                     },
-                    as: "g2",
-                    cond: { $in: ["$$g2", genreLower] }
+                    as: "g",
+                    cond: {
+                      $in: [
+                        {
+                          $toLower: {
+                            $trim: {
+                              input: {
+                                $cond: [
+                                  { $eq: [{ $type: "$$g" }, "string"] },
+                                  "$$g",
+                                  { $toString: "$$g" } // fallback: force string
+                                ]
+                              }
+                            }
+                          }
+                        },
+                        genreLower
+                      ]
+                    }
                   }
                 }
               },
@@ -701,16 +742,33 @@ const projectFormDataController = {
       }
 
 
+
+
+
+
       // YEAR OF RELEASE
       if (yearOfRelease) {
         const yearArr = Array.isArray(yearOfRelease) ? yearOfRelease : yearOfRelease.split(',');
         const yearNums = yearArr.map(y => parseInt(y));
+
         filterConditions.push({
           $expr: {
-            $in: [{ $year: "$specificationsInfoData.completionDate" }, yearNums]
+            $in: [
+              {
+                $year: {
+                  $cond: [
+                    { $isArray: "$specificationsInfoData.completionDate" },
+                    { $arrayElemAt: ["$specificationsInfoData.completionDate", 0] }, // take first element
+                    "$specificationsInfoData.completionDate"
+                  ]
+                }
+              },
+              yearNums
+            ]
           }
         });
       }
+
 
       if (organizationIds && organizationIds.length > 0) {
         filterConditions.push({
@@ -725,13 +783,15 @@ const projectFormDataController = {
         matchStage = { $and: filterConditions };
       }
 
-      const pipeline = [
-        {
-          $addFields: {
-            userIdObj: { $toObjectId: "$userId" }
-          }
-        },
-        // Lookup specifications
+      const pipeline = [];
+
+      // Apply Seller restriction first
+      if (Object.keys(baseMatch).length > 0) {
+        pipeline.push({ $match: baseMatch });
+      }
+
+      pipeline.push(
+        { $addFields: { userIdObj: { $toObjectId: "$userId" } } },
         {
           $lookup: {
             from: "specificationsinfos",
@@ -740,8 +800,6 @@ const projectFormDataController = {
             as: "specificationsInfoData"
           }
         },
-
-        // Lookup rights
         {
           $lookup: {
             from: "rightsinfogroups",
@@ -750,8 +808,6 @@ const projectFormDataController = {
             as: "rightsInfoData"
           }
         },
-
-        // Lookup user
         {
           $lookup: {
             from: "users",
@@ -760,46 +816,37 @@ const projectFormDataController = {
             as: "userData"
           }
         },
-        {
-          $unwind: {
-            path: "$userData",
-            preserveNullAndEmptyArrays: true
-          }
-        },
+        { $unwind: { path: "$userData", preserveNullAndEmptyArrays: true } }
+      );
 
-        // Apply filters AFTER all lookups
-        ...(filterConditions.length > 0 ? [{ $match: { $and: filterConditions } }] : []),
+      // Dynamic filters
+      if (filterConditions.length > 0) {
+        pipeline.push({ $match: { $and: filterConditions } });
+      }
 
-        // Facet for pagination + total count
-        {
-          $facet: {
-            totalCount: [{ $count: "count" }],
-            projects: [
-              { $skip: skip },
-              { $limit: limitNum }
-            ]
-          }
+      // Pagination
+      pipeline.push({
+        $facet: {
+          totalCount: [{ $count: "count" }],
+          projects: [{ $skip: skip }, { $limit: limitNum }]
         }
-      ];
-
-
-      const projects = await ProjectInfo.aggregate(pipeline);
-      console.log('📊 Aggregation pipeline executed:', projects);
-
-      const totalCount = projects[0]?.totalCount[0]?.count || 0;
-
-
-      res.json({
-        message: "Projects fetched successfully",
-        totalCount,
-        totalPages: Math.ceil(totalCount / limitNum),
-        currentPage: pageNum,
-        projects: projects[0]?.projects
       });
 
-    } catch (error) {
-      console.error("Error in filtering:", error);
-      res.status(500).json({ error: "Internal server error" });
+      const result = await ProjectInfo.aggregate(pipeline);
+
+      const totalCount = result[0]?.totalCount[0]?.count || 0;
+      const projects = result[0]?.projects || [];
+
+      res.json({
+        success: true,
+        projects,
+        totalPages: Math.ceil(totalCount / limitNum),
+        currentPage: parseInt(page),
+        totalCount
+      });
+    } catch (err) {
+      console.error("Error fetching projects:", err);
+      res.status(500).json({ success: false, message: "Server error" });
     }
   }
 };
