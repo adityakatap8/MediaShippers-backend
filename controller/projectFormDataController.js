@@ -499,7 +499,7 @@ const projectFormDataController = {
 
       console.log('🔍 Filtering projects with params:', {
         rights,
-        includingRegions, usageRights, contentCategory, languages, genre, yearOfRelease,
+        includingRegions, excludingCountries, usageRights, contentCategory, languages, genre, yearOfRelease,
         userId,
         organizationIds
       })
@@ -601,41 +601,75 @@ const projectFormDataController = {
 
       // INCLUDING REGIONS
       if (includingRegions) {
-        const regions = Array.isArray(includingRegions) ? includingRegions : includingRegions.split(',');
-        console.log('🌍 Including regions:', regions);
-        const regionsLower = regions.map(r => r.toLowerCase());
-        console.log('🌍 Including regions:', regionsLower);
+        const regions = Array.isArray(includingRegions)
+          ? includingRegions
+          : includingRegions.split(',');
 
-        const isWorldwide = regionsLower.length === 1 && regionsLower[0] === "worldwide";
-        if (isWorldwide) {
+        const regionsLower = regions.map(r => r.trim().toLowerCase());
+
+        const isWorldwideOnly =
+          regionsLower.length === 1 &&
+          (regionsLower[0] === "worldwide" || regionsLower[0] === "world-wide");
+
+        if (isWorldwideOnly) {
           filterConditions.push({
             $or: [
-              { "rightsInfoData.territories.id": "worldwide" },
-              { "rightsInfoData.territories.includedRegions.id": "worldwide" }
+              { "rightsInfoData.rightsGroups.territories.includedRegions.id": { $regex: /^world(-)?wide$/i } },
+              { "rightsInfoData.rightsGroups.territories.id": { $regex: /^world(-)?wide$/i } }
             ]
           });
         } else {
+          const matchRegions = [...regionsLower, "worldwide", "world-wide"];
+
           filterConditions.push({
             $or: [
-              { "rightsInfoData.territories.id": { $in: [...regionsLower, "worldwide"] } },
-              { "rightsInfoData.territories.includedRegions.id": { $in: [...regionsLower, "worldwide"] } }
+              {
+                "rightsInfoData.rightsGroups.territories.includedRegions.id": {
+                  $in: matchRegions.map(r => new RegExp(`^${r}$`, "i")),
+                }
+              },
+              {
+                "rightsInfoData.rightsGroups.territories.id": {
+                  $in: matchRegions.map(r => new RegExp(`^${r}$`, "i")),
+                }
+              }
             ]
           });
         }
       }
 
+
+
       // EXCLUDING COUNTRIES
       if (excludingCountries) {
-        const countries = Array.isArray(excludingCountries) ? excludingCountries : excludingCountries.split(',');
-        const countriesLower = countries.map(c => c.toLowerCase());
+  const countries = Array.isArray(excludingCountries)
+    ? excludingCountries
+    : excludingCountries.split(',');
 
-        filterConditions.push({
-          $or: [
-            { "rightsInfoData.territories.country": { $in: countriesLower } },
-            { "rightsInfoData.territories.excludeCountries.name": { $in: countriesLower } }
-          ]
-        });
+  // Use regex for case-insensitive match
+  const regexCountries = countries.map(
+    c => new RegExp(`^${c.trim()}$`, "i")
+  );
+
+  filterConditions.push({
+    rightsInfoData: {
+      $elemMatch: {
+        rightsGroups: {
+          $elemMatch: {
+            "territories.excludeCountries": {
+              $elemMatch: {
+                name: { $in: regexCountries }
+              }
+            }
+          }
+        }
       }
+    }
+  });
+}
+
+
+
 
       // USAGE RIGHTS
       if (usageRights) {
