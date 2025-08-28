@@ -828,7 +828,7 @@ updateMultipleSections: async (req, res) => {
   },
 
   // Get all projects with form data
-  getAllProjectsWithFormData: async (req, res) => {
+getAllProjectsWithFormData: async (req, res) => {
     try {
       const {
         userId,
@@ -845,30 +845,24 @@ updateMultipleSections: async (req, res) => {
         yearOfRelease,
         organizationIds
       } = req.query;
-
-      console.log('🔍 Filtering projects with params:', {
+      console.log(':mag: Filtering projects with params:', {
         rights,
         includingRegions, excludingCountries, usageRights, contentCategory, languages, genre, yearOfRelease,
         userId,
         organizationIds
       })
-
       if (!userId || !role) {
         return res.status(400).json({ error: 'Missing userId or role in request query' });
       }
-
       const pageNum = parseInt(page);
       const limitNum = parseInt(limit);
       const skip = (pageNum - 1) * limitNum;
-
       let baseMatch = {};
       if (role === 'Seller') {
         baseMatch.userId = userId;
       }
-
       // Build filter conditions
       const filterConditions = [];
-
       // RIGHTS
       // ...existing code...
       // RIGHTS
@@ -877,7 +871,6 @@ updateMultipleSections: async (req, res) => {
         const rightsArr = Array.isArray(rights)
           ? rights.map(r => r.toLowerCase())
           : [rights.toLowerCase()];
-
         filterConditions.push({
           $expr: {
             $gt: [
@@ -942,24 +935,16 @@ updateMultipleSections: async (req, res) => {
           }
         });
       }
-
-
-
       // ...existing code...
-
-
       // INCLUDING REGIONS
       if (includingRegions) {
         const regions = Array.isArray(includingRegions)
           ? includingRegions
           : includingRegions.split(',');
-
         const regionsLower = regions.map(r => r.trim().toLowerCase());
-
         const isWorldwideOnly =
           regionsLower.length === 1 &&
           (regionsLower[0] === "worldwide" || regionsLower[0] === "world-wide");
-
         if (isWorldwideOnly) {
           filterConditions.push({
             $or: [
@@ -969,7 +954,6 @@ updateMultipleSections: async (req, res) => {
           });
         } else {
           const matchRegions = [...regionsLower, "worldwide", "world-wide"];
-
           filterConditions.push({
             $or: [
               {
@@ -986,20 +970,15 @@ updateMultipleSections: async (req, res) => {
           });
         }
       }
-
-
-
       // EXCLUDING COUNTRIES
       if (excludingCountries) {
   const countries = Array.isArray(excludingCountries)
     ? excludingCountries
     : excludingCountries.split(',');
-
   // Use regex for case-insensitive match
   const regexCountries = countries.map(
     c => new RegExp(`^${c.trim()}$`, "i")
   );
-
   filterConditions.push({
     rightsInfoData: {
       $elemMatch: {
@@ -1016,16 +995,11 @@ updateMultipleSections: async (req, res) => {
     }
   });
 }
-
-
-
-
       // USAGE RIGHTS
       if (usageRights) {
         // Normalize to array
         const usageArr = Array.isArray(usageRights) ? usageRights : usageRights.split(',');
         const usageRegexArr = usageArr.map(u => new RegExp(`^${u}$`, 'i')); // case-insensitive regex
-
         filterConditions.push({
           $or: [
             // Case A: usageRights inside rightsInfoData[].usageRights[]
@@ -1059,10 +1033,6 @@ updateMultipleSections: async (req, res) => {
           ]
         });
       }
-
-
-
-
       // CONTENT CATEGORY
       if (contentCategory) {
         const categoryArr = Array.isArray(contentCategory) ? contentCategory : contentCategory.split(',');
@@ -1076,25 +1046,19 @@ updateMultipleSections: async (req, res) => {
           })
         });
       }
-
-
       // LANGUAGE
       if (languages) {
         const langArr = Array.isArray(languages) ? languages : languages.split(',');
-
         filterConditions.push({
           "specificationsInfoData.language": {
             $in: langArr.map(l => new RegExp(`^${l}$`, 'i')) // case-insensitive match
           }
         });
       }
-
-
       // GENRE
       if (genre) {
         const genreArr = Array.isArray(genre) ? genre : genre.split(',');
         const genreLower = genreArr.map(g => g.toLowerCase().trim());
-
         filterConditions.push({
           $expr: {
             $gt: [
@@ -1160,17 +1124,10 @@ updateMultipleSections: async (req, res) => {
           }
         });
       }
-
-
-
-
-
-
       // YEAR OF RELEASE
       if (yearOfRelease) {
         const yearArr = Array.isArray(yearOfRelease) ? yearOfRelease : yearOfRelease.split(',');
         const yearNums = yearArr.map(y => parseInt(y));
-
         filterConditions.push({
           $expr: {
             $in: [
@@ -1188,8 +1145,6 @@ updateMultipleSections: async (req, res) => {
           }
         });
       }
-
-
       if (organizationIds && organizationIds.length > 0) {
         filterConditions.push({
           "userData.organizationId": {
@@ -1197,19 +1152,15 @@ updateMultipleSections: async (req, res) => {
           }
         });
       }
-
       let matchStage = {};
       if (filterConditions.length > 0) {
         matchStage = { $and: filterConditions };
       }
-
       const pipeline = [];
-
       // Apply Seller restriction first
       if (Object.keys(baseMatch).length > 0) {
         pipeline.push({ $match: baseMatch });
       }
-
       pipeline.push(
         { $addFields: { userIdObj: { $toObjectId: "$userId" } } },
         {
@@ -1238,12 +1189,10 @@ updateMultipleSections: async (req, res) => {
         },
         { $unwind: { path: "$userData", preserveNullAndEmptyArrays: true } }
       );
-
       // Dynamic filters
       if (filterConditions.length > 0) {
         pipeline.push({ $match: { $and: filterConditions } });
       }
-
       // Pagination
       pipeline.push({
         $facet: {
@@ -1251,12 +1200,9 @@ updateMultipleSections: async (req, res) => {
           projects: [{ $skip: skip }, { $limit: limitNum }]
         }
       });
-
       const result = await ProjectInfo.aggregate(pipeline);
-
       const totalCount = result[0]?.totalCount[0]?.count || 0;
       const projects = result[0]?.projects || [];
-
       res.json({
         success: true,
         projects,
