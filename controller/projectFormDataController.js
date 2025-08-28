@@ -166,72 +166,421 @@ const projectFormDataController = {
 
   ,
 
-  updateMultipleSections: async (req, res) => {
-    const { id: projectId } = req.params;
-    const updateData = req.body;
+  // updateMultipleSections: async (req, res) => {
+  //   const { id: projectId } = req.params;
+  //   const updateData = req.body;
 
-    try {
-      if (!mongoose.Types.ObjectId.isValid(projectId)) {
-        return res.status(400).json({ error: 'Invalid project ID' });
+  //   try {
+  //     if (!mongoose.Types.ObjectId.isValid(projectId)) {
+  //       return res.status(400).json({ error: 'Invalid project ID' });
+  //     }
+
+  //     if (!updateData || Object.keys(updateData).length === 0) {
+  //       return res.status(400).json({ error: 'No update data provided.' });
+  //     }
+
+  //     const project = await ProjectInfo.findById(projectId);
+  //     if (!project) {
+  //       return res.status(404).json({ error: 'Project not found' });
+  //     }
+
+  //     const sectionsMap = {
+  //       projectInfo: { model: ProjectInfo, id: project._id },
+  //       creditsInfo: { model: CreditsInfo, id: project.creditsInfoId },
+  //       rightsInfo: { model: RightsInfoGroup, id: project.rightsInfoId },
+  //       specificationsInfo: { model: SpecificationsInfo, id: project.specificationsInfoId },
+  //       srtInfo: { model: SrtInfoFileSet, id: project.srtFilesId },
+  //     };
+
+  //     const updateResults = {};
+  //     console.log('🔄 Incoming update sections:', Object.keys(updateData));
+
+  //     for (const [section, { model, id }] of Object.entries(sectionsMap)) {
+  //       const sectionUpdate = updateData[section];
+  //       if (sectionUpdate && id && mongoose.Types.ObjectId.isValid(id)) {
+  //         const updatedDoc = await model.findByIdAndUpdate(id, sectionUpdate, { new: true }).exec();
+  //         if (updatedDoc) {
+  //           updateResults[section] = {
+  //             id: updatedDoc._id,
+  //             updatedData: updatedDoc,
+  //           };
+  //         }
+  //       } else if (sectionUpdate) {
+  //         console.warn(`⚠️ Skipping ${section} update due to missing or invalid ID`);
+  //       }
+  //     }
+
+  //     const recognizedSections = Object.keys(sectionsMap);
+  //     const extraSections = Object.keys(updateData).filter(k => !recognizedSections.includes(k));
+  //     if (extraSections.length > 0) {
+  //       console.warn('⚠️ Unrecognized sections in request body:', extraSections);
+  //     }
+
+  //     if (Object.keys(updateResults).length === 0) {
+  //       return res.status(400).json({ message: 'No valid sections to update or invalid IDs.' });
+  //     }
+
+  //     return res.status(200).json({
+  //       message: '✅ Project and related sections updated successfully',
+  //       updates: updateResults,
+  //     });
+
+  //   } catch (error) {
+  //     console.error('❌ Error updating project and sections:', error);
+  //     return res.status(500).json({ error: 'Internal server error' });
+  //   }
+  // }
+
+// updateMultipleSections: async (req, res) => {
+//   const { id: projectId } = req.params;
+//   const updateData = req.body;
+
+//   // Helper: Normalize rights-related fields into a consistent rightsGroups structure
+//   const normalizeRightsGroups = (project) => {
+//     if (Array.isArray(project.rightsGroups) && project.rightsGroups.length > 0) {
+//       return project.rightsGroups;
+//     }
+
+//     return [
+//       {
+//         rights: project.rights || [],
+//         territories: project.territories || { includedRegions: [], excludeCountries: [] },
+//         licenseTerm: project.licenseTerm || [],
+//         usageRights: project.usageRights || [],
+//         paymentTerms: project.paymentTerms || [],
+//         platformType: project.platformType || [],
+//         listPrice: project.listPrice || '',
+//       },
+//     ];
+//   };
+
+//   try {
+//     if (!mongoose.Types.ObjectId.isValid(projectId)) {
+//       return res.status(400).json({ error: 'Invalid project ID' });
+//     }
+
+//     if (!updateData || Object.keys(updateData).length === 0) {
+//       return res.status(400).json({ error: 'No update data provided.' });
+//     }
+
+//     const project = await ProjectInfo.findById(projectId);
+//     if (!project) {
+//       return res.status(404).json({ error: 'Project not found' });
+//     }
+
+//     const sectionsMap = {
+//       projectInfo: { model: ProjectInfo, id: project._id },
+//       creditsInfo: { model: CreditsInfo, id: project.creditsInfoId },
+//       rightsInfo: { model: RightsInfoGroup, id: project.rightsInfoId },
+//       specificationsInfo: { model: SpecificationsInfo, id: project.specificationsInfoId },
+//       srtInfo: { model: SrtInfoFileSet, id: project.srtFilesId },
+//     };
+
+//     const updateResults = {};
+//     console.log('🔄 Incoming update sections:', Object.keys(updateData));
+
+//     // Update standard sections
+//     for (const [section, { model, id }] of Object.entries(sectionsMap)) {
+//       const sectionUpdate = updateData[section];
+//       if (sectionUpdate && id && mongoose.Types.ObjectId.isValid(id)) {
+//         const updatedDoc = await model.findByIdAndUpdate(id, sectionUpdate, { new: true }).exec();
+//         if (updatedDoc) {
+//           updateResults[section] = {
+//             id: updatedDoc._id,
+//             updatedData: updatedDoc,
+//           };
+//         }
+//       } else if (sectionUpdate) {
+//         console.warn(`⚠️ Skipping ${section} update due to missing or invalid ID`);
+//       }
+//     }
+
+//     // ✅ NEW: Directly handle rightsGroups if sent
+//     if (updateData.rightsGroups && Array.isArray(updateData.rightsGroups)) {
+//       project.rightsGroups = updateData.rightsGroups;
+//       await project.save();
+//       updateResults['rightsGroups'] = {
+//         id: project._id,
+//         updatedData: project.rightsGroups,
+//       };
+//     } else {
+//       // Fallback: Update individual rights-related fields if rightsGroups not provided
+//       const isBulkUploaded = Array.isArray(project.rightsGroups) && project.rightsGroups.length > 0;
+//       const fieldsToUpdate = [
+//         'rights',
+//         'territories',
+//         'licenseTerm',
+//         'usageRights',
+//         'paymentTerms',
+//         'platformType',
+//         'listPrice',
+//       ];
+
+//       let updated = false;
+
+//       if (isBulkUploaded) {
+//         fieldsToUpdate.forEach((field) => {
+//           if (updateData[field] !== undefined) {
+//             project.rightsGroups[0][field] = updateData[field];
+//             updated = true;
+//           }
+//         });
+
+//         if (updated) {
+//           await project.save();
+//           updateResults['rightsGroups'] = {
+//             id: project._id,
+//             updatedData: project.rightsGroups[0],
+//           };
+//         }
+//       } else {
+//         fieldsToUpdate.forEach((field) => {
+//           if (updateData[field] !== undefined) {
+//             project[field] = updateData[field];
+//             updated = true;
+//           }
+//         });
+
+//         if (updated) {
+//           await project.save();
+//           updateResults['projectInfo'] = {
+//             id: project._id,
+//             updatedData: project,
+//           };
+//         }
+//       }
+//     }
+
+//     // Normalize and ensure rightsGroups are consistent
+//     project.rightsGroups = normalizeRightsGroups(project);
+
+//     // Save normalized structure if changed
+//     await project.save();
+
+//     // Final result
+//     updateResults['projectInfo'] = {
+//       id: project._id,
+//       updatedData: project,
+//     };
+
+//     // Handle extra (unrecognized) sections
+//     const recognizedSections = Object.keys(sectionsMap);
+//     const extraSections = Object.keys(updateData).filter(k => !recognizedSections.includes(k) && k !== 'rightsGroups');
+//     if (extraSections.length > 0) {
+//       console.warn('⚠️ Unrecognized sections in request body:', extraSections);
+//     }
+
+//     if (Object.keys(updateResults).length === 0) {
+//       return res.status(400).json({ message: 'No valid sections to update or invalid IDs.' });
+//     }
+
+//     return res.status(200).json({
+//       message: '✅ Project and related sections updated successfully',
+//       updates: updateResults,
+//     });
+
+//   } catch (error) {
+//     console.error('❌ Error updating project and sections:', error);
+//     return res.status(500).json({ error: 'Internal server error' });
+//   }
+// }
+
+updateMultipleSections: async (req, res) => {
+  const { id: projectId } = req.params;
+  const updateData = req.body;
+
+  try {
+    // ✅ 1. Validate project ID and updateData
+    if (!mongoose.Types.ObjectId.isValid(projectId)) {
+      return res.status(400).json({ error: 'Invalid project ID' });
+    }
+
+    if (!updateData || Object.keys(updateData).length === 0) {
+      return res.status(400).json({ error: 'No update data provided.' });
+    }
+
+    const project = await ProjectInfo.findById(projectId);
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
+    // ✅ 2. Setup mapping for standard sections
+    const sectionsMap = {
+      projectInfo: { model: ProjectInfo, id: project._id },
+      creditsInfo: { model: CreditsInfo, id: project.creditsInfoId },
+      specificationsInfo: { model: SpecificationsInfo, id: project.specificationsInfoId },
+      srtInfo: { model: SrtInfoFileSet, id: project.srtFilesId },
+    };
+
+    const updateResults = {};
+    console.log('🔄 Incoming update sections:', Object.keys(updateData));
+
+    // ✅ 3. Update standard sections
+    for (const [section, { model, id }] of Object.entries(sectionsMap)) {
+      const sectionUpdate = updateData[section];
+      if (sectionUpdate && id && mongoose.Types.ObjectId.isValid(id)) {
+        const updatedDoc = await model.findByIdAndUpdate(id, sectionUpdate, { new: true }).exec();
+        if (updatedDoc) {
+          updateResults[section] = {
+            id: updatedDoc._id,
+            updatedData: updatedDoc,
+          };
+        }
+      } else if (sectionUpdate) {
+        console.warn(`⚠️ Skipping ${section} update due to missing or invalid ID`);
       }
+    }
 
-      if (!updateData || Object.keys(updateData).length === 0) {
-        return res.status(400).json({ error: 'No update data provided.' });
-      }
+    // ✅ 4. Load rightsInfo document
+    const rightsInfo = project.rightsInfoId && mongoose.Types.ObjectId.isValid(project.rightsInfoId)
+      ? await RightsInfoGroup.findById(project.rightsInfoId)
+      : null;
 
-      const project = await ProjectInfo.findById(projectId);
-      if (!project) {
-        return res.status(404).json({ error: 'Project not found' });
-      }
+    if (!rightsInfo) {
+      console.warn('⚠️ rightsInfo not found for project.');
+      return res.status(404).json({ error: 'Rights info not found' });
+    }
 
-      const sectionsMap = {
-        projectInfo: { model: ProjectInfo, id: project._id },
-        creditsInfo: { model: CreditsInfo, id: project.creditsInfoId },
-        rightsInfo: { model: RightsInfoGroup, id: project.rightsInfoId },
-        specificationsInfo: { model: SpecificationsInfo, id: project.specificationsInfoId },
-        srtInfo: { model: SrtInfoFileSet, id: project.srtFilesId },
-      };
+    // ✅ 4.5 Check if this is a legacy single-upload document
+    const isLegacySingleUpload = rightsInfo.rightsGroups === undefined && rightsInfo.rights !== undefined;
+    console.log('🔍 Document type:', isLegacySingleUpload ? 'Legacy Single Upload' : 'Current Schema');
 
-      const updateResults = {};
-      console.log('🔄 Incoming update sections:', Object.keys(updateData));
+    const directRightsFields = [
+      'rights',
+      'usageRights',
+      'licenseTerm',
+      'paymentTerms',
+      'platformType',
+      'territories',
+      'listPrice',
+    ];
 
-      for (const [section, { model, id }] of Object.entries(sectionsMap)) {
-        const sectionUpdate = updateData[section];
-        if (sectionUpdate && id && mongoose.Types.ObjectId.isValid(id)) {
-          const updatedDoc = await model.findByIdAndUpdate(id, sectionUpdate, { new: true }).exec();
-          if (updatedDoc) {
-            updateResults[section] = {
-              id: updatedDoc._id,
-              updatedData: updatedDoc,
-            };
+    const payloadIsBulk = updateData.rightsInfo?.rightsGroups?.length > 0;
+    const hasDirectRightsFields = directRightsFields.some(field =>
+      updateData.rightsInfo?.hasOwnProperty(field)
+    );
+
+    // ✅ 4.5 Debug: Log what we're receiving for rightsInfo
+    if (updateData.rightsInfo) {
+      console.log('📥 Received rightsInfo:', JSON.stringify(updateData.rightsInfo, null, 2));
+      console.log('📥 Is bulk payload?', payloadIsBulk);
+      console.log('📥 Has direct rights fields?', hasDirectRightsFields);
+    }
+
+    // ✅ 5. Handle legacy single-upload documents
+    if (isLegacySingleUpload) {
+      console.log('🔄 Processing legacy single-upload document');
+      
+      const updatedFields = {};
+      let hasUpdates = false;
+
+      for (const field of directRightsFields) {
+        const newValue = updateData.rightsInfo[field];
+        if (newValue !== undefined) {
+          // For legacy documents, update top-level fields directly
+          if (field === 'territories' && typeof newValue === 'object') {
+            rightsInfo[field] = { ...newValue };
+          } 
+          else if (Array.isArray(newValue)) {
+            rightsInfo[field] = [...newValue];
+          } 
+          else {
+            rightsInfo[field] = newValue;
           }
-        } else if (sectionUpdate) {
-          console.warn(`⚠️ Skipping ${section} update due to missing or invalid ID`);
+
+          rightsInfo.markModified(field);
+          updatedFields[field] = newValue;
+          hasUpdates = true;
+          console.log(`✅ Updated legacy rightsInfo.${field}:`, newValue);
         }
       }
 
-      const recognizedSections = Object.keys(sectionsMap);
-      const extraSections = Object.keys(updateData).filter(k => !recognizedSections.includes(k));
-      if (extraSections.length > 0) {
-        console.warn('⚠️ Unrecognized sections in request body:', extraSections);
+      if (hasUpdates) {
+        await rightsInfo.save();
+        updateResults['rightsInfo'] = {
+          id: rightsInfo._id,
+          updatedData: updatedFields,
+        };
+        console.log('✅ Saved legacy single-upload rightsInfo updates');
       }
-
-      if (Object.keys(updateResults).length === 0) {
-        return res.status(400).json({ message: 'No valid sections to update or invalid IDs.' });
-      }
-
-      return res.status(200).json({
-        message: '✅ Project and related sections updated successfully',
-        updates: updateResults,
-      });
-
-    } catch (error) {
-      console.error('❌ Error updating project and sections:', error);
-      return res.status(500).json({ error: 'Internal server error' });
     }
+    // ✅ 6. Bulk project update (current schema)
+    else if (payloadIsBulk) {
+      console.log('🔄 Processing bulk update (current schema)');
+      rightsInfo.rightsGroups = updateData.rightsInfo.rightsGroups;
+      rightsInfo.markModified('rightsGroups');
+      await rightsInfo.save();
+
+      updateResults['rightsGroups'] = {
+        id: rightsInfo._id,
+        updatedData: rightsInfo.rightsGroups,
+      };
+      console.log('✅ Updated bulk rightsGroups');
+    }
+    // ✅ 7. Single-upload update (current schema)
+    else if (hasDirectRightsFields) {
+      console.log('🔄 Processing single update (current schema)');
+      
+      // For current schema single updates, we need to update the first rightsGroup
+      if (!rightsInfo.rightsGroups || rightsInfo.rightsGroups.length === 0) {
+        rightsInfo.rightsGroups = [{}];
+      }
+
+      const updatedFields = {};
+      let hasUpdates = false;
+
+      for (const field of directRightsFields) {
+        const newValue = updateData.rightsInfo[field];
+        if (newValue !== undefined) {
+          if (field === 'territories' && typeof newValue === 'object') {
+            rightsInfo.rightsGroups[0][field] = { ...newValue };
+          } 
+          else if (Array.isArray(newValue)) {
+            rightsInfo.rightsGroups[0][field] = [...newValue];
+          } 
+          else {
+            rightsInfo.rightsGroups[0][field] = newValue;
+          }
+
+          rightsInfo.markModified('rightsGroups');
+          updatedFields[field] = newValue;
+          hasUpdates = true;
+          console.log(`✅ Updated current schema rightsInfo.rightsGroups[0].${field}:`, newValue);
+        }
+      }
+
+      if (hasUpdates) {
+        await rightsInfo.save();
+        updateResults['rightsInfo'] = {
+          id: rightsInfo._id,
+          updatedData: updatedFields,
+        };
+        console.log('✅ Saved current schema single-upload rightsInfo updates');
+      }
+    }
+
+    // ✅ 8. Warn if any unknown fields present
+    const recognizedSections = Object.keys(sectionsMap).concat(['rightsInfo']);
+    const extraSections = Object.keys(updateData).filter(k => !recognizedSections.includes(k));
+    if (extraSections.length > 0) {
+      console.warn('⚠️ Unrecognized sections in request body:', extraSections);
+    }
+
+    // ✅ 9. Final response
+    if (Object.keys(updateResults).length === 0) {
+      return res.status(400).json({ message: 'No valid sections to update or invalid IDs.' });
+    }
+
+    return res.status(200).json({
+      message: '✅ Project and related sections updated successfully',
+      updates: updateResults,
+    });
+
+  } catch (error) {
+    console.error('❌ Error updating project and sections:', error);
+    return res.status(500).json({ error: 'Internal server error' });
   }
-
-
+}
   ,
 
 
