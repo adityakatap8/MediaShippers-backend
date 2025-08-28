@@ -9,8 +9,9 @@ const UserSchema = new mongoose.Schema({
     required: true
   },
   organizationId: {
-    type: String,
-    ref: 'Organization'
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Organization',
+    required: true
   },
   role: {
     type: String,
@@ -38,7 +39,11 @@ const UserSchema = new mongoose.Schema({
     default: Date.now
   },
   companySite: String,
-  phoneNumber: Number
+  phoneNumber: Number,
+  createdBy: {
+    type: String,
+    ref: 'User'
+  }
 });
 
 

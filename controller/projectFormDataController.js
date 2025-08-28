@@ -842,13 +842,15 @@ updateMultipleSections: async (req, res) => {
         contentCategory,
         languages,
         genre,
-        yearOfRelease
+        yearOfRelease,
+        organizationIds
       } = req.query;
 
       console.log('🔍 Filtering projects with params:', {
         rights,
-        includingRegions, usageRights, contentCategory, languages, genre, yearOfRelease,
+        includingRegions, excludingCountries, usageRights, contentCategory, languages, genre, yearOfRelease,
         userId,
+        organizationIds
       })
 
       if (!userId || !role) {
@@ -862,8 +864,6 @@ updateMultipleSections: async (req, res) => {
       let baseMatch = {};
       if (role === 'Seller') {
         baseMatch.userId = userId;
-      } else if (!['Buyer', 'Admin'].includes(role)) {
-        return res.status(400).json({ error: 'Invalid user role' });
       }
 
       // Build filter conditions
@@ -873,147 +873,10 @@ updateMultipleSections: async (req, res) => {
       // ...existing code...
       // RIGHTS
       if (rights) {
-        // Normalize rights to array of lowercase strings
+        // Normalize to array of lowercase rights
         const rightsArr = Array.isArray(rights)
           ? rights.map(r => r.toLowerCase())
           : [rights.toLowerCase()];
-
-        if (rightsArr.length === 1 && rightsArr[0] === "all rights") {
-          filterConditions.push({
-            $expr: {
-              $gt: [
-                {
-                  $size: {
-                    $filter: {
-                      input: {
-                        $reduce: {
-                          input: "$formData.rightsInfo",
-                          initialValue: [],
-                          in: { $concatArrays: ["$$value", { $ifNull: ["$$this.rights", []] }] }
-                        }
-                      },
-                      as: "right",
-                      cond: { $eq: [{ $toLower: "$$right.name" }, "all rights"] }
-                    }
-                  }
-                },
-                0
-              ]
-            }
-          });
-        } else {
-          filterConditions.push({
-            $expr: {
-              $gt: [
-                {
-                  $size: {
-                    $filter: {
-                      input: {
-                        $reduce: {
-                          input: "$formData.rightsInfo",
-                          initialValue: [],
-                          in: { $concatArrays: ["$$value", { $ifNull: ["$$this.rights", []] }] }
-                        }
-                      },
-                      as: "right",
-                      cond: {
-                        $or: [
-                          { $in: [{ $toLower: "$$right.name" }, rightsArr] },
-                          { $eq: [{ $toLower: "$$right.name" }, "all rights"] }
-                        ]
-                      }
-                    }
-                  }
-                },
-                0
-              ]
-            }
-          });
-        }
-      }
-      // ...existing code...
-
-
-      // INCLUDING REGIONS
-      if (includingRegions) {
-        const regions = Array.isArray(includingRegions) ? includingRegions : includingRegions.split(',');
-        const regionsLower = regions.map(r => r.toLowerCase());
-
-        const isWorldwide = regionsLower.length === 1 && regionsLower[0] === "worldwide";
-        if (isWorldwide) {
-          filterConditions.push({
-            $or: [
-              { "formData.rightsInfo.territories.id": "worldwide" },
-              { "formData.rightsInfo.territories.includedRegions.name": "worldwide" }
-            ]
-          });
-        } else {
-          filterConditions.push({
-            $or: [
-              { "formData.rightsInfo.territories.id": { $in: [...regionsLower, "worldwide"] } },
-              { "formData.rightsInfo.territories.includedRegions.name": { $in: [...regionsLower, "SAARC"] } }
-            ]
-          });
-        }
-      }
-
-      // EXCLUDING COUNTRIES
-      if (excludingCountries) {
-        const countries = Array.isArray(excludingCountries) ? excludingCountries : excludingCountries.split(',');
-        const countriesLower = countries.map(c => c.toLowerCase());
-
-        filterConditions.push({
-          $or: [
-            { "formData.rightsInfo.territories.country": { $in: countriesLower } },
-            { "formData.rightsInfo.territories.excludeCountries.name": { $in: countriesLower } }
-          ]
-        });
-      }
-
-      // USAGE RIGHTS
-      if (usageRights) {
-        const usageArr = Array.isArray(usageRights) ? usageRights : usageRights.split(',');
-
-        filterConditions.push({
-          "formData.rightsInfo": {
-            $elemMatch: {
-              usageRights: {
-                $elemMatch: {
-                  name: {
-                    $in: usageArr.map(u => new RegExp(`^${u}$`, 'i')) // case-insensitive
-                  }
-                }
-              }
-            }
-          }
-        });
-      }
-
-
-      // CONTENT CATEGORY
-      if (contentCategory) {
-        const categoryArr = Array.isArray(contentCategory) ? contentCategory : contentCategory.split(',');
-        filterConditions.push({
-          "formData.specificationsInfo.projectType": { $in: categoryArr.map(c => c.toLowerCase()) }
-        });
-      }
-
-      // LANGUAGE
-      if (languages) {
-        const langArr = Array.isArray(languages) ? languages : languages.split(',');
-
-        filterConditions.push({
-          "formData.specificationsInfo.language": {
-            $in: langArr.map(l => new RegExp(`^${l}$`, 'i')) // case-insensitive match
-          }
-        });
-      }
-
-
-      // GENRE
-      if (genre) {
-        const genreArr = Array.isArray(genre) ? genre : genre.split(',');
-        const genreLower = genreArr.map(g => g.toLowerCase());
 
         filterConditions.push({
           $expr: {
@@ -1022,20 +885,55 @@ updateMultipleSections: async (req, res) => {
                 $size: {
                   $filter: {
                     input: {
-                      $map: {
-                        input: {
-                          $cond: [
-                            { $isArray: "$formData.specificationsInfo.genres" },
-                            "$formData.specificationsInfo.genres",
-                            { $split: [{ $ifNull: ["$formData.specificationsInfo.genres", ""] }, ","] }
+                      $concatArrays: [
+                        // Case A: nested rights from rightsInfoData.rightsGroups
+                        {
+                          $reduce: {
+                            input: { $ifNull: ["$rightsInfoData", []] },
+                            initialValue: [],
+                            in: {
+                              $concatArrays: [
+                                "$$value",
+                                {
+                                  $reduce: {
+                                    input: { $ifNull: ["$$this.rightsGroups", []] },
+                                    initialValue: [],
+                                    in: { $concatArrays: ["$$value", { $ifNull: ["$$this.rights", []] }] }
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        },
+                        // Case B: flat rights at root
+                        { $ifNull: ["$rights", []] }
+                      ]
+                    },
+                    as: "right",
+                    cond: {
+                      $or: [
+                        // Case 1: user searched only "all rights"
+                        {
+                          $and: [
+                            { $eq: [rightsArr.length, 1] },
+                            { $eq: [rightsArr[0], "all rights"] },
+                            { $eq: [{ $toLower: "$$right.name" }, "all rights"] }
                           ]
                         },
-                        as: "g",
-                        in: { $toLower: { $trim: { input: "$$g" } } }
-                      }
-                    },
-                    as: "g2",
-                    cond: { $in: ["$$g2", genreLower] }
+                        // Case 2: otherwise match requested rights OR "all rights"
+                        {
+                          $and: [
+                            { $not: { $and: [{ $eq: [rightsArr.length, 1] }, { $eq: [rightsArr[0], "all rights"] }] } },
+                            {
+                              $or: [
+                                { $in: [{ $toLower: "$$right.name" }, rightsArr] },
+                                { $eq: [{ $toLower: "$$right.name" }, "all rights"] }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
                   }
                 }
               },
@@ -1046,13 +944,256 @@ updateMultipleSections: async (req, res) => {
       }
 
 
+
+      // ...existing code...
+
+
+      // INCLUDING REGIONS
+      if (includingRegions) {
+        const regions = Array.isArray(includingRegions)
+          ? includingRegions
+          : includingRegions.split(',');
+
+        const regionsLower = regions.map(r => r.trim().toLowerCase());
+
+        const isWorldwideOnly =
+          regionsLower.length === 1 &&
+          (regionsLower[0] === "worldwide" || regionsLower[0] === "world-wide");
+
+        if (isWorldwideOnly) {
+          filterConditions.push({
+            $or: [
+              { "rightsInfoData.rightsGroups.territories.includedRegions.id": { $regex: /^world(-)?wide$/i } },
+              { "rightsInfoData.rightsGroups.territories.id": { $regex: /^world(-)?wide$/i } }
+            ]
+          });
+        } else {
+          const matchRegions = [...regionsLower, "worldwide", "world-wide"];
+
+          filterConditions.push({
+            $or: [
+              {
+                "rightsInfoData.rightsGroups.territories.includedRegions.id": {
+                  $in: matchRegions.map(r => new RegExp(`^${r}$`, "i")),
+                }
+              },
+              {
+                "rightsInfoData.rightsGroups.territories.id": {
+                  $in: matchRegions.map(r => new RegExp(`^${r}$`, "i")),
+                }
+              }
+            ]
+          });
+        }
+      }
+
+
+
+      // EXCLUDING COUNTRIES
+      if (excludingCountries) {
+  const countries = Array.isArray(excludingCountries)
+    ? excludingCountries
+    : excludingCountries.split(',');
+
+  // Use regex for case-insensitive match
+  const regexCountries = countries.map(
+    c => new RegExp(`^${c.trim()}$`, "i")
+  );
+
+  filterConditions.push({
+    rightsInfoData: {
+      $elemMatch: {
+        rightsGroups: {
+          $elemMatch: {
+            "territories.excludeCountries": {
+              $elemMatch: {
+                name: { $in: regexCountries }
+              }
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
+
+
+
+      // USAGE RIGHTS
+      if (usageRights) {
+        // Normalize to array
+        const usageArr = Array.isArray(usageRights) ? usageRights : usageRights.split(',');
+        const usageRegexArr = usageArr.map(u => new RegExp(`^${u}$`, 'i')); // case-insensitive regex
+
+        filterConditions.push({
+          $or: [
+            // Case A: usageRights inside rightsInfoData[].usageRights[]
+            {
+              rightsInfoData: {
+                $elemMatch: {
+                  usageRights: {
+                    $elemMatch: { name: { $in: usageRegexArr } }
+                  }
+                }
+              }
+            },
+            // Case B: usageRights inside rightsInfoData[].rightsGroups[].usageRights[]
+            {
+              rightsInfoData: {
+                $elemMatch: {
+                  rightsGroups: {
+                    $elemMatch: {
+                      usageRights: {
+                        $elemMatch: { name: { $in: usageRegexArr } }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            // (Optional legacy) Case C: usageRights directly at root
+            {
+              usageRights: { $elemMatch: { name: { $in: usageRegexArr } } }
+            }
+          ]
+        });
+      }
+
+
+
+
+      // CONTENT CATEGORY
+      if (contentCategory) {
+        const categoryArr = Array.isArray(contentCategory) ? contentCategory : contentCategory.split(',');
+        filterConditions.push({
+          $or: categoryArr.map(c => {
+            // Convert underscores to regex that matches space OR underscore
+            const pattern = c.replace(/_/g, "[ _]");
+            return {
+              "specificationsInfoData.projectType": { $regex: new RegExp(pattern, "i") }
+            };
+          })
+        });
+      }
+
+
+      // LANGUAGE
+      if (languages) {
+        const langArr = Array.isArray(languages) ? languages : languages.split(',');
+
+        filterConditions.push({
+          "specificationsInfoData.language": {
+            $in: langArr.map(l => new RegExp(`^${l}$`, 'i')) // case-insensitive match
+          }
+        });
+      }
+
+
+      // GENRE
+      if (genre) {
+        const genreArr = Array.isArray(genre) ? genre : genre.split(',');
+        const genreLower = genreArr.map(g => g.toLowerCase().trim());
+
+        filterConditions.push({
+          $expr: {
+            $gt: [
+              {
+                $size: {
+                  $filter: {
+                    input: {
+                      $reduce: {
+                        input: {
+                          $cond: [
+                            { $isArray: "$specificationsInfoData.genres" },
+                            "$specificationsInfoData.genres",
+                            { $split: [{ $ifNull: ["$specificationsInfoData.genres", ""] }, ","] }
+                          ]
+                        },
+                        initialValue: [],
+                        in: {
+                          $concatArrays: [
+                            "$$value",
+                            {
+                              $cond: [
+                                { $eq: [{ $type: "$$this" }, "string"] },
+                                { $split: ["$$this", ","] }, // split string like "crime, thriller"
+                                [
+                                  {
+                                    $cond: [
+                                      { $eq: [{ $type: "$$this" }, "array"] },
+                                      { $toString: { $first: "$$this" } }, // convert ["crime, thriller"] → "crime, thriller"
+                                      "$$this"
+                                    ]
+                                  }
+                                ]
+                              ]
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    as: "g",
+                    cond: {
+                      $in: [
+                        {
+                          $toLower: {
+                            $trim: {
+                              input: {
+                                $cond: [
+                                  { $eq: [{ $type: "$$g" }, "string"] },
+                                  "$$g",
+                                  { $toString: "$$g" } // fallback: force string
+                                ]
+                              }
+                            }
+                          }
+                        },
+                        genreLower
+                      ]
+                    }
+                  }
+                }
+              },
+              0
+            ]
+          }
+        });
+      }
+
+
+
+
+
+
       // YEAR OF RELEASE
       if (yearOfRelease) {
         const yearArr = Array.isArray(yearOfRelease) ? yearOfRelease : yearOfRelease.split(',');
         const yearNums = yearArr.map(y => parseInt(y));
+
         filterConditions.push({
           $expr: {
-            $in: [{ $year: "$formData.specificationsInfo.completionDate" }, yearNums]
+            $in: [
+              {
+                $year: {
+                  $cond: [
+                    { $isArray: "$specificationsInfoData.completionDate" },
+                    { $arrayElemAt: ["$specificationsInfoData.completionDate", 0] }, // take first element
+                    "$specificationsInfoData.completionDate"
+                  ]
+                }
+              },
+              yearNums
+            ]
+          }
+        });
+      }
+
+
+      if (organizationIds && organizationIds.length > 0) {
+        filterConditions.push({
+          "userData.organizationId": {
+            $in: organizationIds.map(id => id)
           }
         });
       }
@@ -1062,67 +1203,70 @@ updateMultipleSections: async (req, res) => {
         matchStage = { $and: filterConditions };
       }
 
-      const pipeline = [
-        { $match: baseMatch },
-        {
-          $lookup: {
-            from: "projectforms",
-            localField: "_id",
-            foreignField: "projectInfo",
-            as: "formData"
-          }
-        },
-        { $unwind: { path: "$formData", preserveNullAndEmptyArrays: true } },
+      const pipeline = [];
+
+      // Apply Seller restriction first
+      if (Object.keys(baseMatch).length > 0) {
+        pipeline.push({ $match: baseMatch });
+      }
+
+      pipeline.push(
+        { $addFields: { userIdObj: { $toObjectId: "$userId" } } },
         {
           $lookup: {
             from: "specificationsinfos",
-            localField: "formData.specificationsInfo",
+            localField: "specificationsInfoId",
             foreignField: "_id",
-            as: "formData.specificationsInfo"
+            as: "specificationsInfoData"
           }
         },
-        { $unwind: { path: "$formData.specificationsInfo", preserveNullAndEmptyArrays: true } },
         {
           $lookup: {
             from: "rightsinfogroups",
-            localField: "formData.rightsInfo",
+            localField: "rightsInfoId",
             foreignField: "_id",
-            as: "formData.rightsInfo"
+            as: "rightsInfoData"
           }
         },
-        ...(filterConditions.length > 0 ? [{ $match: { $and: filterConditions } }] : []),
         {
-          $facet: {
-            totalCount: [{ $count: "count" }],
-            projects: [
-              { $skip: skip },    // skip AFTER filters
-              { $limit: limitNum } // limit AFTER filters
-            ],
-            paginatedResults: [
-              { $skip: skip },
-              { $limit: limitNum }
-            ]
+          $lookup: {
+            from: "users",
+            localField: "userIdObj",
+            foreignField: "_id",
+            as: "userData"
           }
+        },
+        { $unwind: { path: "$userData", preserveNullAndEmptyArrays: true } }
+      );
+
+      // Dynamic filters
+      if (filterConditions.length > 0) {
+        pipeline.push({ $match: { $and: filterConditions } });
+      }
+
+      // Pagination
+      pipeline.push({
+        $facet: {
+          totalCount: [{ $count: "count" }],
+          projects: [{ $skip: skip }, { $limit: limitNum }]
         }
-      ];
-
-      const projects = await ProjectInfo.aggregate(pipeline);
-      console.log('📊 Aggregation pipeline executed:', projects);
-
-      const totalCount = projects[0]?.totalCount[0]?.count || 0;
-
-
-      res.json({
-        message: "Projects fetched successfully",
-        totalCount,
-        totalPages: Math.ceil(totalCount / limitNum),
-        currentPage: pageNum,
-        projects: projects[0]?.projects
       });
 
-    } catch (error) {
-      console.error("Error in filtering:", error);
-      res.status(500).json({ error: "Internal server error" });
+      const result = await ProjectInfo.aggregate(pipeline);
+
+      const totalCount = result[0]?.totalCount[0]?.count || 0;
+      const projects = result[0]?.projects || [];
+
+      res.json({
+        success: true,
+        projects,
+        totalPages: Math.ceil(totalCount / limitNum),
+        currentPage: parseInt(page),
+        totalCount
+      });
+    } catch (err) {
+      console.error("Error fetching projects:", err);
+      res.status(500).json({ success: false, message: "Server error" });
     }
   }
 };
