@@ -152,6 +152,112 @@ export const getAllOrganizations = async (req, res) => {
 };
 
 
+export const updateOrganizationWithUser = (req, res) => {
+  const busboy = pkg({ headers: req.headers });
+  const fields = {};
+  const fileUrls = {};
+  const uploads = [];
+
+  busboy.on("field", (fieldname, val) => {
+    fields[fieldname] = val;
+  });
+
+  busboy.on("file", (fieldname, file, filename, encoding, mimetype) => {
+    const key = `org-pdfs/${Date.now()}-${filename}`;
+    const params = {
+      Bucket: process.env.S3_BUCKET_NAME,
+      Key: key,
+      Body: file,
+      ContentType: mimetype,
+    };
+    const uploadPromise = s3
+      .upload(params)
+      .promise()
+      .then((data) => {
+        fileUrls[fieldname] = data.Location;
+      });
+    uploads.push(uploadPromise);
+  });
+
+  busboy.on("finish", async () => {
+    try {
+      await Promise.all(uploads);
+
+      const {
+        organizationId,
+        userId,
+        orgName,
+        orgAddress,
+        orgCorpRegNo,
+        orgGstNo,
+        primaryName,
+        primaryEmail,
+        primaryNo,
+        userName,
+        userEmail,
+        role,
+      } = fields;
+
+      // --- Check if user & org exist ---
+      const organization = await Organization.findById(organizationId);
+      if (!organization) {
+        return res.status(404).json({ message: "Organization not found" });
+      }
+
+      const user = await User.findById(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // --- Update Organization ---
+      if (orgName) organization.orgName = orgName;
+      if (orgAddress) organization.orgAddress = orgAddress;
+      if (orgCorpRegNo) organization.orgCorpRegNo = orgCorpRegNo;
+      if (orgGstNo) organization.orgGstNo = orgGstNo;
+      if (primaryName) organization.primaryName = primaryName;
+      if (primaryEmail) organization.primaryEmail = primaryEmail;
+      if (primaryNo) organization.primaryNo = primaryNo;
+
+      // Replace PDFs only if new uploaded
+      if (fileUrls.orgCorpPdf) organization.orgCorpPdf = fileUrls.orgCorpPdf;
+      if (fileUrls.orgGstPdf) organization.orgGstPdf = fileUrls.orgGstPdf;
+      if (fileUrls.orgAgreementPdf)
+        organization.orgAgreementPdf = fileUrls.orgAgreementPdf;
+
+      await organization.save();
+
+      // --- Update User ---
+      if (userName) user.name = userName;
+      if (userEmail) user.email = userEmail;
+      if (role) user.role = role;
+
+      await user.save();
+
+      return res.status(200).json({
+        message: "Organization and user updated successfully",
+        organization: {
+          id: organization._id,
+          name: organization.orgName,
+        },
+        user: {
+          id: user._id,
+          email: user.email,
+          role: user.role,
+        },
+      });
+    } catch (err) {
+      console.error("Update error:", err);
+      return res
+        .status(500)
+        .json({ message: "Internal server error", error: err.message });
+    }
+  });
+
+  req.pipe(busboy);
+};
+
+
+
 // import { Organization } from '../models/orgModel.js';
 // import { User } from '../models/User.js';
 // import bcrypt from 'bcrypt';
